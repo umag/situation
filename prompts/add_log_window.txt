@@ -1,0 +1,4 @@
+Implement a scrollable log window at the bottom of the TUI screen.
+This window should display logs of API requests made and the responses received (both success and error).
+Modify the API client calls to capture this information instead of printing it directly to stdout/stderr.
+Update the TUI layout, state management, and event handling to support this new window and scrolling.

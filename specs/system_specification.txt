@@ -5,30 +5,63 @@ This application provides a terminal user interface (TUI) for interacting with t
 
 ## 2. Dependencies
 - Rust (Project initialized with `cargo init`)
-- ratatui = "0.26" (Added to Cargo.toml)
-- tokio = { version = "1", features = ["full"] } (Added to Cargo.toml)
-- crossterm = "0.27" (Added to Cargo.toml)
+- ratatui = "0.26"
+- tokio = { version = "1", features = ["full"] }
+- crossterm = "0.27"
+- serde = { version = "1.0", features = ["derive"] } (For JSON deserialization)
+- serde_json = "1.0" (For JSON deserialization)
+- reqwest = { version = "0.12", features = ["json"] } (For making HTTP API calls)
+- dotenvy = "0.15" (For loading `.env` configuration)
 
-## 3. API Endpoint
-https://github.com/systeminit/si/
+## 3. API Endpoint & Configuration
+- Base API URL is loaded from the `SI_API` variable in the `.env` file.
+- Authentication uses a JWT token loaded from the `JWT_TOKEN` variable in the `.env` file.
+- The OpenAPI schema is defined in `openapi.json`.
 
-## 4. Luminork Service
-The application is intended to use the luminork service to access the Systeminit/si API. However, the `luminork` crate added to `Cargo.toml` appears non-standard or requires specific setup/configuration not yet known. API integration is currently blocked pending clarification on how to use the luminork service.
+## 4. API Client Implementation
+- API calls are handled by functions in `src/api_client.rs`.
+- Uses `reqwest` for HTTP communication.
+- Loads configuration lazily using `std::sync::OnceLock`.
+- Data models corresponding to API responses are defined in `src/api_models.rs` using `serde`.
+- Currently implements the `/whoami` endpoint call.
+- The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
-## 5. TUI Layout
-The TUI will display data retrieved from the API in a user-friendly format. It will include features for navigating and interacting with the data.
+## 5. TUI Layout & State
+- The TUI displays data retrieved from the API.
+- Application state is managed in the `App` struct in `src/main.rs`.
+- Displays the user's email (from `/whoami`) in a top bar (1 line high).
+- Displays other `/whoami` data (User ID, Workspace ID) in the main content area below the top bar.
+- Displays a scrollable log window at the bottom (10 lines high).
 
 ## 6. Event Handling
-The application will handle user input events to allow for navigation and interaction within the TUI.
+- Handles basic keyboard input:
+    - 'q' to quit.
+    - Up Arrow / 'k' to scroll the log window up.
+    - Down Arrow / 'j' to scroll the log window down.
 
 ## 7. Error Handling
-The application will implement robust error handling to gracefully handle API errors and other potential issues. Basic terminal setup/teardown error handling is in place.
+- Basic terminal setup/teardown error handling is in place.
+- API client functions return `Result` to propagate errors (env loading, network, deserialization). The `whoami` function now returns logs on success.
+- Errors during initial API call in `run_app` are now logged to the TUI's log window.
+- API request/response details (status, body) are logged to the TUI's log window.
+- TODO: Parse specific API errors (like `ApiError` model) more consistently in the client for better error messages in logs.
 
-## 8. Current Status (as of 2025-04-21)
-- Project initialized.
-- Dependencies added (ratatui, tokio, crossterm, luminork).
-- Basic TUI structure implemented using ratatui and crossterm.
-- Handles basic keyboard input ('q' to quit).
-- Placeholder comments for API integration added.
-- Basic unit test added.
-- **Blocked:** API integration requires clarification on using the `luminork` service.
+## 8. Testing
+- A basic integration test file exists at `tests/api_calls.rs`.
+- Contains a placeholder test for `/whoami` (needs update to use real client).
+- Standard unit test in `main.rs` exists.
+
+## 9. Current Status (as of 2025-04-21 - Updated)
+- Project initialized with basic TUI structure (ratatui, crossterm).
+- Dependencies added (`serde`, `reqwest`, `dotenvy`).
+- `.env` file provides API URL and JWT token.
+- API client module (`src/api_client.rs`) created using `reqwest`.
+- API models module (`src/api_models.rs`) created using `serde`.
+- `/whoami` endpoint is called on startup using credentials from `.env`.
+- TUI displays `/whoami` data (email in top bar, rest in main area).
+- TUI displays API request/response logs in a scrollable window at the bottom.
+- Handles keyboard input: 'q' to quit, Up/Down/j/k to scroll logs.
+- Placeholder test for `/whoami` exists in `tests/api_calls.rs`.
+- Specification document updated.
+- **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
+- **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.

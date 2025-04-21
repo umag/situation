@@ -1,0 +1,1 @@
+create a rust tui application that uses ratatui and calls api for https://github.com/systeminit/si/  using luminork service

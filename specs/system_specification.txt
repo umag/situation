@@ -1,0 +1,34 @@
+# System Specification: Rust TUI Application for Systeminit/si API
+
+## 1. Purpose
+This application provides a terminal user interface (TUI) for interacting with the Systeminit/si API using the luminork service.
+
+## 2. Dependencies
+- Rust (Project initialized with `cargo init`)
+- ratatui = "0.26" (Added to Cargo.toml)
+- tokio = { version = "1", features = ["full"] } (Added to Cargo.toml)
+- crossterm = "0.27" (Added to Cargo.toml)
+
+## 3. API Endpoint
+https://github.com/systeminit/si/
+
+## 4. Luminork Service
+The application is intended to use the luminork service to access the Systeminit/si API. However, the `luminork` crate added to `Cargo.toml` appears non-standard or requires specific setup/configuration not yet known. API integration is currently blocked pending clarification on how to use the luminork service.
+
+## 5. TUI Layout
+The TUI will display data retrieved from the API in a user-friendly format. It will include features for navigating and interacting with the data.
+
+## 6. Event Handling
+The application will handle user input events to allow for navigation and interaction within the TUI.
+
+## 7. Error Handling
+The application will implement robust error handling to gracefully handle API errors and other potential issues. Basic terminal setup/teardown error handling is in place.
+
+## 8. Current Status (as of 2025-04-21)
+- Project initialized.
+- Dependencies added (ratatui, tokio, crossterm, luminork).
+- Basic TUI structure implemented using ratatui and crossterm.
+- Handles basic keyboard input ('q' to quit).
+- Placeholder comments for API integration added.
+- Basic unit test added.
+- **Blocked:** API integration requires clarification on using the `luminork` service.

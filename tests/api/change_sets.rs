@@ -360,8 +360,8 @@ mod tests {
             "Merge status change set ID should match the created one"
         );
 
-        // Add delay before cleanup
-        sleep(std::time::Duration::from_millis(100)).await;
+        // Add delay before cleanup - Increased delay to see if it resolves runtime/client issue
+        sleep(std::time::Duration::from_millis(500)).await;
 
         // Clean up: Delete the change set
         let delete_result =
@@ -371,5 +371,76 @@ mod tests {
             "Failed to delete change set after merge status test: {:?}",
             delete_result.err()
         );
+    }
+
+    /// Test Case: Verify the `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/force_apply` endpoint call.
+    /// Intention: Ensure the application can correctly call the POST endpoint to force apply a change set.
+    /// Design: This test first creates a new change set, then uses its ID to make a POST request
+    ///         to force apply it. It asserts that the response indicates success (returns Ok).
+    ///         Requires a running SI instance and valid .env configuration.
+    ///         Note: The API returns 200 OK with no body on success.
+    #[tokio::test]
+    async fn test_force_apply_change_set_endpoint() {
+        dotenv().ok(); // Load .env file
+        let workspace_id = get_workspace_id()
+            .await
+            .expect("Failed to get workspace_id for test");
+        let change_set_name =
+            format!("test-force-apply-{}", Utc::now().timestamp_millis());
+
+        // 1. Create a change set to get an ID
+        let create_request_body = api_models::CreateChangeSetV1Request {
+            change_set_name: change_set_name.clone(),
+        };
+        let create_result =
+            api_client::create_change_set(&workspace_id, create_request_body)
+                .await;
+        assert!(
+            create_result.is_ok(),
+            "Failed to create change set for force apply test: {:?}",
+            create_result.err()
+        );
+        let (create_response, _logs) = create_result.unwrap();
+        let change_set_id = create_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .expect("Created change set response did not contain an ID")
+            .to_string();
+
+        // Add a small delay
+        sleep(std::time::Duration::from_millis(200)).await;
+
+        // 2. Force apply the created change set
+        // Assume api_client::force_apply_change_set exists
+        let apply_result =
+            api_client::force_apply_change_set(&workspace_id, &change_set_id)
+                .await;
+
+        assert!(
+            apply_result.is_ok(),
+            "API call to force apply change set should return Ok. Error: {:?}",
+            apply_result.err()
+        );
+
+        // The success response has no body, so checking for Ok is the main assertion.
+        // We get back logs, but no specific response data model.
+        let (_response_body_ignored, _logs): ((), Vec<String>) =
+            apply_result.unwrap();
+
+        // Add delay before cleanup
+        sleep(std::time::Duration::from_millis(100)).await;
+
+        // Clean up: Delete the change set (optional, but good practice if apply doesn't auto-delete)
+        // Note: Force applying might merge/delete the change set automatically.
+        // If deletion fails, it might be expected. We'll log the result but not fail the test.
+        let delete_result =
+            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        if delete_result.is_err() {
+            println!(
+                "Note: Failed to delete change set after force apply (might be expected): {:?}",
+                delete_result.err()
+            );
+        }
     }
 }

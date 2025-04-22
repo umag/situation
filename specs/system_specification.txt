@@ -33,6 +33,7 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::get_change_set`)
     - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::delete_change_set`)
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/merge_status` (in `api_client::get_merge_status`)
+    - `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/force_apply` (in `api_client::force_apply_change_set`)
 - The main binary is defined in `src/main.rs` and uses the library.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 

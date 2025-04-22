@@ -17,6 +17,7 @@ use std::env; // Import Utc from chrono
 #[cfg(test)]
 mod tests {
     use super::*; // Import items from parent module
+    use tokio::time::sleep; // Add sleep import
 
     // Helper function to get workspace_id (could be more sophisticated later)
     // For now, assumes it's set directly in .env or fetched via whoami if needed
@@ -124,7 +125,92 @@ mod tests {
         );
         // Ideally, we'd get the ID back and maybe verify the name, but the schema is vague.
         // We might need to list change sets again to confirm creation if the response isn't detailed.
+        // Let's assume the response structure is {"changeSet": {"id": "..."}} for now.
+        let created_id = create_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        assert!(
+            created_id.is_some(),
+            "Response should contain a changeSet object with an id"
+        );
     }
 
-    // TODO: Add tests for other change set operations (get, abandon, apply, etc.)
+    /// Test Case: Verify the `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint call.
+    /// Intention: Ensure the application can correctly call the GET endpoint for a specific
+    ///            change set and handle a successful response.
+    /// Design: This test first creates a new change set, then uses its ID to make a GET request
+    ///         to retrieve the specific change set details. It asserts that the response indicates
+    ///         success and contains the change set object.
+    ///         Requires a running SI instance and valid .env configuration.
+    #[tokio::test]
+    async fn test_get_change_set_endpoint() {
+        dotenv().ok(); // Load .env file
+        let workspace_id = get_workspace_id()
+            .await
+            .expect("Failed to get workspace_id for test");
+        let change_set_name =
+            format!("test-get-changeset-{}", Utc::now().timestamp_millis());
+
+        // 1. Create a change set to get an ID
+        let create_request_body = api_models::CreateChangeSetV1Request {
+            change_set_name: change_set_name.clone(),
+        };
+        let create_result =
+            api_client::create_change_set(&workspace_id, create_request_body)
+                .await;
+        assert!(
+            create_result.is_ok(),
+            "Failed to create change set for get test: {:?}",
+            create_result.err()
+        );
+        let (create_response, _logs) = create_result.unwrap();
+        let change_set_id = create_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .expect("Created change set response did not contain an ID")
+            .to_string();
+
+        // Add a small delay to see if it helps
+        sleep(std::time::Duration::from_millis(200)).await; // Increased delay slightly
+
+        // 2. Get the created change set
+        // Assume api_client::get_change_set exists
+        let get_result =
+            api_client::get_change_set(&workspace_id, &change_set_id).await;
+
+        assert!(
+            get_result.is_ok(),
+            "API call to get change set should return Ok. Error: {:?}",
+            get_result.err()
+        );
+
+        // Add explicit type annotation
+        let (get_response, _logs): (
+            api_models::GetChangeSetV1Response,
+            Vec<String>,
+        ) = get_result.unwrap();
+
+        // Check the structure based on GetChangeSetV1Response
+        assert!(
+            !get_response.change_set.is_null(),
+            "Response should contain a changeSet object"
+        );
+        // Optionally, verify the ID matches if the response structure allows
+        let fetched_id = get_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        assert_eq!(
+            fetched_id,
+            Some(change_set_id),
+            "Fetched change set ID should match the created one"
+        );
+    }
+
+    // TODO: Add tests for other change set operations (abandon, apply, etc.)
 }

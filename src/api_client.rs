@@ -14,9 +14,13 @@
 // - Returns results containing both the data and logs for TUI display.
 
 use crate::api_models::{
-    ApiError, CreateChangeSetV1Request, CreateChangeSetV1Response,
-    ListChangeSetV1Response, WhoamiResponse,
-}; // Removed unused ChangeSetSummary, added Create* models used below
+    ApiError,
+    CreateChangeSetV1Request,
+    CreateChangeSetV1Response,
+    GetChangeSetV1Response, // Added GetChangeSetV1Response
+    ListChangeSetV1Response,
+    WhoamiResponse,
+};
 use dotenvy::dotenv;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use std::env;
@@ -35,35 +39,46 @@ struct ApiConfig {
 static API_CONFIG: OnceLock<Result<ApiConfig, Box<dyn Error + Send + Sync>>> =
     OnceLock::new();
 
+// Helper function to create a config instance. Used by get_api_config.
+fn create_new_api_config() -> Result<ApiConfig, Box<dyn Error + Send + Sync>> {
+    dotenv().ok(); // Load .env file, ignore errors if it doesn't exist
+
+    let base_url = env::var("SI_API")
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    let jwt_token = env::var("JWT_TOKEN")
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    let mut headers = HeaderMap::new();
+    let mut auth_value =
+        HeaderValue::from_str(&format!("Bearer {}", jwt_token))
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    auth_value.set_sensitive(true);
+    headers.insert(AUTHORIZATION, auth_value);
+
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+    Ok(ApiConfig {
+        client,
+        base_url,
+        jwt_token,
+    }) // jwt_token stored for potential future use/refresh
+}
+
+// In test environments, create a new client each time to avoid runtime conflicts.
+#[cfg(test)]
+fn get_api_config() -> Result<ApiConfig, Box<dyn Error + Send + Sync>> {
+    create_new_api_config()
+}
+
+// In non-test environments, use OnceLock for efficiency.
+#[cfg(not(test))]
 fn get_api_config()
 -> Result<&'static ApiConfig, &'static (dyn Error + Send + Sync)> {
     API_CONFIG
-        .get_or_init(|| {
-            dotenv().ok(); // Load .env file, ignore errors if it doesn't exist
-
-            let base_url = env::var("SI_API")
-                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-            let jwt_token = env::var("JWT_TOKEN")
-                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-
-            let mut headers = HeaderMap::new();
-            let mut auth_value =
-                HeaderValue::from_str(&format!("Bearer {}", jwt_token))
-                    .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-            auth_value.set_sensitive(true);
-            headers.insert(AUTHORIZATION, auth_value);
-
-            let client = reqwest::Client::builder()
-                .default_headers(headers)
-                .build()
-                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-
-            Ok(ApiConfig {
-                client,
-                base_url,
-                jwt_token,
-            }) // jwt_token stored for potential future use/refresh
-        })
+        .get_or_init(create_new_api_config) // Use the helper function here
         .as_ref()
         .map_err(|e| &**e) // Convert Box<dyn Error> to &dyn Error
 }
@@ -81,7 +96,15 @@ fn get_api_config()
 pub async fn whoami()
 -> Result<(WhoamiResponse, Vec<String>), Box<dyn Error + Send + Sync>> {
     let mut logs = Vec::new();
-    let config = get_api_config()?; // Get or initialize config
+    // In tests, this returns an owned ApiConfig. In non-tests, a static ref.
+    // We need to handle both cases. Let's borrow it if it's owned.
+    #[cfg(test)]
+    let config_holder = get_api_config()?;
+    #[cfg(test)]
+    let config = &config_holder; // Borrow the owned config
+
+    #[cfg(not(test))]
+    let config = get_api_config()?; // Get static ref
 
     let url = format!("{}/whoami", config.base_url);
     logs.push(format!("Calling API: GET {}", url));
@@ -143,7 +166,13 @@ pub async fn list_change_sets(
 ) -> Result<(ListChangeSetV1Response, Vec<String>), Box<dyn Error + Send + Sync>>
 {
     let mut logs = Vec::new();
-    let config = get_api_config()?; // Get or initialize config
+    #[cfg(test)]
+    let config_holder = get_api_config()?;
+    #[cfg(test)]
+    let config = &config_holder;
+
+    #[cfg(not(test))]
+    let config = get_api_config()?;
 
     let url = format!("{}/v1/w/{}/change-sets", config.base_url, workspace_id);
     logs.push(format!("Calling API: GET {}", url));
@@ -195,7 +224,13 @@ pub async fn create_change_set(
     Box<dyn Error + Send + Sync>,
 > {
     let mut logs = Vec::new();
-    let config = get_api_config()?; // Get or initialize config
+    #[cfg(test)]
+    let config_holder = get_api_config()?;
+    #[cfg(test)]
+    let config = &config_holder;
+
+    #[cfg(not(test))]
+    let config = get_api_config()?;
 
     let url = format!("{}/v1/w/{}/change-sets", config.base_url, workspace_id);
     logs.push(format!("Calling API: POST {}", url));
@@ -217,6 +252,75 @@ pub async fn create_change_set(
         let create_response: CreateChangeSetV1Response = serde_json::from_str(&response_text) // Use imported type directly
             .map_err(|e| format!("Failed to deserialize create change set response: {} - Body: {}", e, response_text))?;
         Ok((create_response, logs))
+    } else {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
+        logs.push(format!("API Error Body: {}", error_text));
+        let error_message = match serde_json::from_str::<ApiError>(&error_text)
+        {
+            Ok(api_error) => format!(
+                "API request failed with status {}: Code {:?}, Message: {}",
+                status, api_error.code, api_error.message
+            ),
+            Err(_) => format!(
+                "API request failed with status {}: {}",
+                status, error_text
+            ),
+        };
+        Err(error_message.into())
+    }
+}
+
+/// Fetches details for a specific change set.
+/// Corresponds to `GET /v1/w/{workspace_id}/change-sets/{change_set_id}`.
+///
+/// # Arguments
+/// * `workspace_id` - The ID of the workspace.
+/// * `change_set_id` - The ID of the change set to fetch.
+///
+/// # Returns
+/// A `Result` containing the `GetChangeSetV1Response` on success, or an error string.
+/// Also returns a `Vec<String>` containing logs generated during the call.
+pub async fn get_change_set(
+    workspace_id: &str,
+    change_set_id: &str,
+) -> Result<(GetChangeSetV1Response, Vec<String>), Box<dyn Error + Send + Sync>>
+{
+    let mut logs = Vec::new();
+    #[cfg(test)]
+    let config_holder = get_api_config()?;
+    #[cfg(test)]
+    let config = &config_holder;
+
+    #[cfg(not(test))]
+    let config = get_api_config()?;
+
+    let url = format!(
+        "{}/v1/w/{}/change-sets/{}",
+        config.base_url, workspace_id, change_set_id
+    );
+    logs.push(format!("Calling API: GET {}", url));
+
+    let response = config.client.get(&url).send().await?;
+
+    let status = response.status();
+    logs.push(format!("API Response Status: {}", status));
+
+    if status.is_success() {
+        let response_text = response.text().await?;
+        logs.push(format!("API Success Body: {}", response_text));
+        let get_response: GetChangeSetV1Response = serde_json::from_str(
+            &response_text,
+        )
+        .map_err(|e| {
+            format!(
+                "Failed to deserialize get change set response: {} - Body: {}",
+                e, response_text
+            )
+        })?;
+        Ok((get_response, logs))
     } else {
         let error_text = response
             .text()

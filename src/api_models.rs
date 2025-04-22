@@ -108,7 +108,19 @@ pub struct CreateChangeSetV1Response {
     pub change_set: serde_json::Value,
 }
 
+/// Represents the response from the `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint.
+/// Based on the schema `GetChangeSetV1Response` in openapi.json.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GetChangeSetV1Response {
+    /// Contains details of the specific change set. The exact structure is not fully
+    /// specified in the OpenAPI schema (just `{"type": "object"}`), so we use `serde_json::Value`
+    /// to capture whatever object is returned.
+    #[serde(rename = "changeSet")] // Match the exact name from OpenAPI
+    pub change_set: serde_json::Value,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
-// for other endpoints like Change Sets, Components, etc.
+// for other endpoints like Components, etc.
 // Examples:
 // pub struct GetComponentV1Response { ... }

@@ -14,16 +14,21 @@ use ratatui::{
     }, // Added Clear, HighlightSpacing
 };
 
+// --- Constants for UI Layout ---
+const LOG_PANEL_HEIGHT: u16 = 10;
+const DROPDOWN_LIST_WIDTH: u16 = 50;
+const DROPDOWN_MAX_ITEMS: usize = 10;
+
 // Intention: Main UI rendering function. Sets up the layout and calls helper functions for each section.
 // Design Choice: Split rendering logic into focused helper functions for clarity and maintainability.
 pub fn ui(f: &mut Frame, app: &App) {
     // Define main layout: Top Bar, Main Content, Logs, optional Input Line.
-    let log_height = 10; // Keep log height definition here for layout calculation
+    // Use constant for log height
     let (log_constraint, input_constraint) =
         if app.input_mode == InputMode::ChangeSetName {
-            (Constraint::Length(log_height), Constraint::Length(1))
+            (Constraint::Length(LOG_PANEL_HEIGHT), Constraint::Length(1))
         } else {
-            (Constraint::Length(log_height), Constraint::Length(0))
+            (Constraint::Length(LOG_PANEL_HEIGHT), Constraint::Length(0))
         };
 
     let main_chunks = Layout::default()
@@ -294,10 +299,14 @@ fn render_input_line(f: &mut Frame, app: &App, area: Rect) {
 // and rendering the stateful List widget. Requires the Change Set trigger area for positioning.
 fn render_changeset_dropdown(f: &mut Frame, app: &App, cs_trigger_area: Rect) {
     if app.changeset_dropdown_active {
-        let list_height =
-            app.change_sets.as_ref().map_or(1, |cs| cs.len()).min(10) as u16
-                + 2;
-        let list_width = 50; // Fixed width
+        // Use constants for dropdown dimensions
+        let list_height = app
+            .change_sets
+            .as_ref()
+            .map_or(1, |cs| cs.len())
+            .min(DROPDOWN_MAX_ITEMS) as u16 // Use constant for max items
+            + 2; // +2 for borders
+        let list_width = DROPDOWN_LIST_WIDTH; // Use constant for width
 
         // Calculate position below the trigger
         let list_area = Rect {

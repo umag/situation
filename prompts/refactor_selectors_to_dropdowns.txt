@@ -1,0 +1,1 @@
+make workspace selector a dropdown menu at top left corner, put change set selector also a drop down menu near it

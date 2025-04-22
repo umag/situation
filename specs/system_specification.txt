@@ -52,39 +52,44 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `change_set_list_state`: `ListState` for the change set list.
     - `selected_change_set_details`: `Option<ChangeSet>` for the selected item's details.
     - `selected_change_set_merge_status`: `Option<MergeStatusV1Response>` for the selected item's merge status.
-    - `current_action`: `Option<String>` to display feedback during API calls.
-    - `show_details_pane`: `bool` to control visibility of the details pane.
+    - `current_action`: `Option<String>` to display feedback during API calls (shown in log title bar).
     - `input_mode`: `InputMode` enum (`Normal`, `ChangeSetName`) to track current input state.
     - `input_buffer`: `String` to store user input for change set name.
     - `logs`: `Vec<String>` for logging messages.
     - `log_scroll`: `usize` for scrolling the log view.
+    - `dropdown_focus`: `DropdownFocus` enum (`Workspace`, `ChangeSet`) to track which top-level trigger has focus.
+    - `changeset_dropdown_active`: `bool` to control visibility of the change set dropdown list.
 - Layout:
-    - Top bar (1 line): Displays current action status (left, only if not in input mode) and user email (right).
-    - Main content area (flexible):
-        - If `show_details_pane` is false: Displays user info (top) and the selectable change set list (bottom).
-        - If `show_details_pane` is true: Splits horizontally into two panes:
-            - Left Pane: User info (top) and change set list (bottom).
-            - Right Pane (Details Pane): Displays details (`selected_change_set_details`) and merge status (`selected_change_set_merge_status`) for the selected change set.
-    - Log window (10 lines): Displays scrollable logs (`logs`). Positioned above the input line if active.
+    - Top bar (1 line): Displays Workspace trigger (left), Change Set trigger (middle), and user email (right). Focused trigger is highlighted.
+    - Main content area (flexible): Displays details (`selected_change_set_details`) and merge status (`selected_change_set_merge_status`) for the selected change set.
+    - Change Set Dropdown (conditional overlay): If `changeset_dropdown_active` is true, displays a selectable list of change sets below the Change Set trigger.
+    - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title.
     - Input line (1 line, bottom, conditional): Displays the input prompt and buffer when `input_mode` is `ChangeSetName`.
 
 ## 6. Event Handling
 - Main event loop in `run_app` is asynchronous (`async fn`).
 - Handles keyboard input:
-    - 'q': Quit the application.
-    - Up Arrow: Select previous item in the change set list (wraps).
-    - Down Arrow: Select next item in the change set list (wraps).
-    - 'k': Scroll the log window up (Normal mode).
-    - 'j': Scroll the log window down (Normal mode).
-    - Enter:
-        - Normal mode: Toggle the visibility of the details pane (`show_details_pane`). When opening, fetches details using `get_change_set` and `get_merge_status` API calls.
-        - ChangeSetName mode: Submits the entered name to create a new change set using `create_change_set` API call. Refreshes the list and returns to Normal mode.
-    - 'c': (Normal mode) Enter `ChangeSetName` input mode to prompt the user for a new change set name.
-    - 'd': (Normal mode) Delete the selected change set using `delete_change_set` API call. Refreshes the list.
-    - 'f': (Normal mode) Force apply the selected change set using `force_apply_change_set` API call. Refreshes the list.
-    - Esc: (ChangeSetName mode) Cancel input, clear buffer, and return to Normal mode.
-    - Backspace: (ChangeSetName mode) Delete the last character from the input buffer.
-    - Character input: (ChangeSetName mode) Append character to the input buffer.
+    - **Normal Mode (Dropdown Closed):**
+        - 'q': Quit the application.
+        - Tab: Switch focus between Workspace and Change Set triggers (`dropdown_focus`).
+        - Enter / Space: Activate the focused trigger.
+            - Workspace: (Currently no action).
+            - Change Set: Opens the change set dropdown list (`changeset_dropdown_active` = true). If an item is selected, also fetches details/status using `get_change_set` and `get_merge_status`.
+        - 'c': Enter `ChangeSetName` input mode.
+        - 'd': Delete the *currently selected* change set (from `change_set_list_state`) using `delete_change_set`. Refreshes list.
+        - 'f': Force apply the *currently selected* change set using `force_apply_change_set`. Refreshes list.
+        - 'k': Scroll the log window up.
+        - 'j': Scroll the log window down.
+    - **Normal Mode (Change Set Dropdown Active):**
+        - Up Arrow: Select previous item in the dropdown list (wraps).
+        - Down Arrow: Select next item in the dropdown list (wraps).
+        - Enter: Selects the highlighted item, closes the dropdown (`changeset_dropdown_active` = false), clears details (requires explicit fetch).
+        - Esc / Tab: Closes the dropdown (`changeset_dropdown_active` = false) without changing selection. Tab also switches focus.
+    - **ChangeSetName Mode:**
+        - Enter: Submits the entered name (`input_buffer`) to create a new change set using `create_change_set`. Refreshes list, returns to Normal mode.
+        - Esc: Cancel input, clear buffer, and return to Normal mode.
+        - Backspace: Delete the last character from the input buffer.
+        - Character input: Append character to the input buffer.
 - Uses a helper function `refresh_change_sets` to reload the change set list after create, delete, or apply actions.
 
 ## 7. Error Handling
@@ -110,14 +115,17 @@ This application provides a terminal user interface (TUI) for interacting with t
 - API client and models are in the library.
 - API client uses `reqwest` and lazy static config from `.env`.
 - All specified changeset API endpoints are implemented in the client.
-- TUI (`main.rs`) implemented:
-    - Fetches and displays `/whoami` data and a list of change sets on startup.
-    - Provides a selectable list of change sets.
-    - Allows toggling a details pane (Enter in Normal mode) showing selected change set info and merge status.
-    - Supports creating change sets ('c' enters input mode, Enter submits name), deleting ('d'), and applying ('f') via keybindings in Normal mode.
-    - Displays API logs and action status messages (in top bar).
+- TUI (`main.rs`) implemented (as of 2025-04-22 - Dropdown UI Update):
+    - Fetches and displays `/whoami` data (Workspace ID, Email) on startup.
+    - Top bar displays Workspace trigger (static), Change Set dropdown trigger, and Email. Focus is switchable via Tab.
+    - Change Set trigger (Enter/Space) opens/closes a dropdown list of available change sets.
+    - Dropdown list allows selection via Up/Down arrows. Enter selects, Esc/Tab closes.
+    - Main content area displays details and merge status for the currently selected change set (fetched on demand via Enter on trigger, 'd', or 'f').
+    - Supports creating change sets ('c' enters input mode, Enter submits name).
+    - Supports deleting ('d') and applying ('f') the *selected* change set.
+    - Displays API logs and action status messages (in log window title bar).
     - Displays input prompt and buffer (in bottom line) when creating a change set.
-    - Handles basic navigation (Up/Down) and log scrolling (j/k) in Normal mode.
+    - Handles log scrolling (j/k) in Normal mode.
     - Handles text input (characters, Backspace, Esc, Enter) in ChangeSetName mode.
     - Allows quitting ('q').
 - Integration tests exist for API client functions.

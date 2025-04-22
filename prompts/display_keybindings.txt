@@ -1,0 +1,1 @@
+display all keybindings in detail pane for now

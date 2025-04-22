@@ -1,0 +1,1 @@
+add color to workspace name and current change set name

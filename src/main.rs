@@ -665,18 +665,26 @@ fn ui(f: &mut Frame, app: &App) {
     {
         Style::default().bg(Color::Blue).fg(Color::White) // Focused style
     } else {
-        Style::default()
+        Style::default() // Normal style for the whole paragraph background/focus
     };
-    let ws_trigger = Paragraph::new(format!(" Workspace: {} ", ws_name))
-        .style(ws_style)
-        .block(Block::default()); //.borders(Borders::ALL)); // Optional border
+    // Intention: Display workspace name with color.
+    // Design Choice: Use Spans within a Line to apply color only to the name.
+    let ws_line = Line::from(vec![
+        Span::raw(" Workspace: "),
+        Span::styled(ws_name, Style::default().fg(Color::Cyan)), // Apply Cyan color here
+        Span::raw(" "),
+    ]);
+    let ws_trigger = Paragraph::new(ws_line)
+        .style(ws_style) // Apply focus style to the whole paragraph
+        .block(Block::default());
     f.render_widget(ws_trigger, ws_trigger_area);
 
     // Change Set Trigger
-    let selected_cs_display = app.get_selected_changeset_summary().map_or_else(
-        || "Select Change Set".to_string(),
-        |cs| format!("{} ({})", cs.name, cs.status),
-    );
+    let (selected_cs_name, selected_cs_status) =
+        app.get_selected_changeset_summary().map_or(
+            ("Select Change Set".to_string(), "".to_string()), // Default text
+            |cs| (cs.name.clone(), format!(" ({})", cs.status)), // Extract name and status
+        );
     let cs_indicator = if app.changeset_dropdown_active {
         "▼"
     } else {
@@ -687,14 +695,21 @@ fn ui(f: &mut Frame, app: &App) {
     {
         Style::default().bg(Color::Blue).fg(Color::White) // Focused style
     } else {
-        Style::default()
+        Style::default() // Normal style for the whole paragraph background/focus
     };
-    let cs_trigger = Paragraph::new(format!(
-        " Change Set: {} {} ",
-        selected_cs_display, cs_indicator
-    ))
-    .style(cs_style)
-    .block(Block::default()); //.borders(Borders::ALL)); // Optional border
+    // Intention: Display change set name with color.
+    // Design Choice: Use Spans within a Line to apply color only to the name.
+    let cs_line = Line::from(vec![
+        Span::raw(" Change Set: "),
+        Span::styled(selected_cs_name, Style::default().fg(Color::Yellow)), // Apply Yellow color here
+        Span::raw(selected_cs_status), // Status without color
+        Span::raw(" "),
+        Span::raw(cs_indicator),
+        Span::raw(" "),
+    ]);
+    let cs_trigger = Paragraph::new(cs_line)
+        .style(cs_style) // Apply focus style to the whole paragraph
+        .block(Block::default());
     f.render_widget(cs_trigger, cs_trigger_area);
 
     // Email
@@ -715,45 +730,51 @@ fn ui(f: &mut Frame, app: &App) {
     let inner_details_area = details_block.inner(content_area);
     f.render_widget(details_block, content_area);
 
-    let mut details_text = Vec::new();
-    if let Some(details) = &app.selected_change_set_details {
-        details_text.push(Line::from(format!("ID: {}", details.id)));
-        details_text.push(Line::from(format!("Name: {}", details.name)));
-        details_text.push(Line::from(format!("Status: {}", details.status)));
-        // TODO: Add more fields from ChangeSet if they exist
-        details_text.push(Line::from("---")); // Separator
+    // Intention: Display keybindings in the main content area.
+    // Design Choice: Use a static list of Lines in a Paragraph, replacing the previous details view.
+    let keybindings = vec![
+        Line::from(Span::styled(
+            "--- Keybindings ---",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Normal Mode (Dropdown Closed):",
+            Style::default().add_modifier(Modifier::UNDERLINED),
+        )),
+        Line::from("  q          : Quit"),
+        Line::from("  Tab        : Switch Focus (Workspace <-> Change Set)"),
+        Line::from(
+            "  Enter/Space: Activate Focused Trigger (Open Dropdown / Fetch Details)",
+        ),
+        Line::from("  c          : Create Change Set (Enter Input Mode)"),
+        Line::from("  d          : Delete Selected Change Set"),
+        Line::from("  f          : Force Apply Selected Change Set"),
+        Line::from("  k          : Scroll Logs Up"),
+        Line::from("  j          : Scroll Logs Down"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Normal Mode (Change Set Dropdown Active):",
+            Style::default().add_modifier(Modifier::UNDERLINED),
+        )),
+        Line::from("  Up Arrow   : Select Previous Item"),
+        Line::from("  Down Arrow : Select Next Item"),
+        Line::from("  Enter      : Confirm Selection & Close Dropdown"),
+        Line::from("  Esc / Tab  : Close Dropdown"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "ChangeSetName Input Mode:",
+            Style::default().add_modifier(Modifier::UNDERLINED),
+        )),
+        Line::from("  Enter      : Submit Name & Create"),
+        Line::from("  Esc        : Cancel Input"),
+        Line::from("  Backspace  : Delete Character"),
+        Line::from("  (any char) : Append Character"),
+    ];
 
-        // Display Merge Status if available
-        if let Some(status) = &app.selected_change_set_merge_status {
-            details_text.push(Line::from("Merge Status:"));
-            if status.actions.is_empty() {
-                details_text.push(Line::from("  No actions required."));
-            } else {
-                for action in &status.actions {
-                    let component_info = action
-                        .component
-                        .as_ref()
-                        .map_or_else(String::new, |c| format!(" ({})", c.name));
-                    details_text.push(Line::from(format!(
-                        "  - {} {} {}",
-                        action.kind, action.name, component_info
-                    )));
-                }
-            }
-        } else {
-            details_text.push(Line::from(
-                "Loading merge status... (Press Enter again?)",
-            ));
-        }
-    } else if app.get_selected_changeset_summary().is_some() {
-        details_text.push(Line::from("Press Enter, 'd', or 'f' to load details/status for selected Change Set."));
-    } else {
-        details_text.push(Line::from("No Change Set selected or available."));
-    }
-
-    let details_paragraph =
-        Paragraph::new(details_text).wrap(Wrap { trim: true }); // Trim wrapping
-    f.render_widget(details_paragraph, inner_details_area);
+    let keybindings_paragraph =
+        Paragraph::new(keybindings).wrap(Wrap { trim: true });
+    f.render_widget(keybindings_paragraph, inner_details_area);
 
     // --- Log Window Rendering (Bottom) ---
     let log_block = Block::default()

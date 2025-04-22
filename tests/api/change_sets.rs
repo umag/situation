@@ -126,6 +126,17 @@ mod tests {
             create_response.change_set.name, change_set_name,
             "Created change set name should match the request"
         );
+
+        // Clean up: Delete the created change set
+        let change_set_id = create_response.change_set.id.clone();
+        sleep(std::time::Duration::from_millis(100)).await; // Small delay before delete
+        let delete_result =
+            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        assert!(
+            delete_result.is_ok(),
+            "Failed to delete change set after create test: {:?}",
+            delete_result.err()
+        );
     }
 
     /// Test Case: Verify the `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint call.
@@ -195,6 +206,16 @@ mod tests {
         assert_eq!(
             get_response.change_set.name, change_set_name,
             "Fetched change set name should match"
+        );
+
+        // Clean up: Delete the created change set
+        sleep(std::time::Duration::from_millis(100)).await; // Small delay before delete
+        let delete_result =
+            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        assert!(
+            delete_result.is_ok(),
+            "Failed to delete change set after get test: {:?}",
+            delete_result.err()
         );
     }
 

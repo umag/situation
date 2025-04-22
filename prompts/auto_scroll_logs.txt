@@ -1,0 +1,1 @@
+automatically scroll logs in log window

@@ -56,14 +56,14 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `input_mode`: `InputMode` enum (`Normal`, `ChangeSetName`) to track current input state.
     - `input_buffer`: `String` to store user input for change set name.
     - `logs`: `Vec<String>` for logging messages.
-    - `log_scroll`: `usize` for scrolling the log view.
+    - `log_scroll`: `usize` for scrolling the log view. The view automatically scrolls to the bottom when new logs are added via `add_log_auto_scroll`.
     - `dropdown_focus`: `DropdownFocus` enum (`Workspace`, `ChangeSet`) to track which top-level trigger has focus.
     - `changeset_dropdown_active`: `bool` to control visibility of the change set dropdown list.
 - Layout:
     - Top bar (1 line): Displays Workspace trigger (left, ID in Cyan), Change Set trigger (middle, selected name in Yellow), and user email (right). Focused trigger is highlighted with a background color.
     - Main content area (flexible): Displays a static list of application keybindings. (Previously displayed change set details/status).
     - Change Set Dropdown (conditional overlay): If `changeset_dropdown_active` is true, displays a selectable list of change sets below the Change Set trigger.
-    - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title.
+    - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title. Logs automatically scroll to the bottom when new entries are added.
     - Input line (1 line, bottom, conditional): Displays the input prompt and buffer when `input_mode` is `ChangeSetName`.
 
 ## 6. Event Handling
@@ -78,8 +78,8 @@ This application provides a terminal user interface (TUI) for interacting with t
         - 'c': Enter `ChangeSetName` input mode.
         - 'd': Delete the *currently selected* change set (from `change_set_list_state`) using `delete_change_set`. Refreshes list.
         - 'f': Force apply the *currently selected* change set using `force_apply_change_set`. Refreshes list.
-        - 'k': Scroll the log window up.
-        - 'j': Scroll the log window down.
+        - 'k': Manually scroll the log window up.
+        - 'j': Manually scroll the log window down.
     - **Normal Mode (Change Set Dropdown Active):**
         - Up Arrow: Select previous item in the dropdown list (wraps).
         - Down Arrow: Select next item in the dropdown list (wraps).
@@ -95,7 +95,7 @@ This application provides a terminal user interface (TUI) for interacting with t
 ## 7. Error Handling
 - Basic terminal setup/teardown error handling is in place.
 - API client functions return `Result<(ResponseType, Vec<String>), Box<dyn Error>>` to propagate errors and logs.
-- Errors during API calls in `run_app` are logged to the TUI's log window.
+- Errors during API calls in `run_app` are logged to the TUI's log window (with auto-scroll).
 - The `current_action` state provides user feedback during potentially long-running API calls.
 - TODO: Parse specific API errors (like `ApiError` model) more consistently in the client for better error messages in logs.
 
@@ -104,13 +104,13 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Tests cover `/whoami` and change set operations (`list`, `create`, `get`, `delete`, `merge_status`).
 - Unit tests are located in `tests/unit/`.
     - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
-    - Unit tests for `App` state logic were removed due to difficulty testing binary internals.
+    - Unit tests for `App` state logic (including manual and automatic log scrolling) exist in `tests/unit/app_state.rs`.
 - Test modules (`api`, `unit`) are declared in the main test file `tests/api_calls.rs`.
 - API test modules (`change_sets`, `whoami`) are declared in `tests/api/mod.rs`.
-- Unit test modules (`api_models`) are declared in `tests/unit/mod.rs`.
+- Unit test modules (`api_models`, `app_state`) are declared in `tests/unit/mod.rs`.
 - **TODO:** Add tests for TUI interactions and state management.
 
-## 9. Current Status (as of 2025-04-22 - TUI Update)
+## 9. Current Status (as of 2025-04-22 - Auto Scroll Update)
 - Project refactored into a library (`src/lib.rs`) and a binary (`src/main.rs`).
 - API client and models are in the library.
 - API client uses `reqwest` and lazy static config from `.env`.
@@ -123,12 +123,12 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Main content area displays a static list of keybindings. Change set details and merge status are no longer displayed here but are still fetched when selecting a change set or performing actions ('d', 'f').
     - Supports creating change sets ('c' enters input mode, Enter submits name).
     - Supports deleting ('d') and applying ('f') the *selected* change set.
-    - Displays API logs and action status messages (in log window title bar).
+    - Displays API logs and action status messages (in log window title bar). Logs automatically scroll to the bottom when new entries are added.
     - Displays input prompt and buffer (in bottom line) when creating a change set.
-    - Handles log scrolling (j/k) in Normal mode.
+    - Handles manual log scrolling (j/k) in Normal mode.
     - Handles text input (characters, Backspace, Esc, Enter) in ChangeSetName mode.
     - Allows quitting ('q').
 - Integration tests exist for API client functions.
-- Unit tests exist for API model deserialization.
+- Unit tests exist for API model deserialization and App state (including log scrolling).
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.

@@ -212,5 +212,74 @@ mod tests {
         );
     }
 
-    // TODO: Add tests for other change set operations (abandon, apply, etc.)
+    /// Test Case: Verify the `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint call.
+    /// Intention: Ensure the application can correctly call the DELETE endpoint for a specific
+    ///            change set and handle a successful response indicating deletion.
+    /// Design: This test first creates a new change set, then uses its ID to make a DELETE request.
+    ///         It asserts that the response indicates success (`success: true`).
+    ///         Requires a running SI instance and valid .env configuration.
+    #[tokio::test]
+    async fn test_delete_change_set_endpoint() {
+        dotenv().ok(); // Load .env file
+        let workspace_id = get_workspace_id()
+            .await
+            .expect("Failed to get workspace_id for test");
+        let change_set_name =
+            format!("test-delete-changeset-{}", Utc::now().timestamp_millis());
+
+        // 1. Create a change set to get an ID
+        let create_request_body = api_models::CreateChangeSetV1Request {
+            change_set_name: change_set_name.clone(),
+        };
+        let create_result =
+            api_client::create_change_set(&workspace_id, create_request_body)
+                .await;
+        assert!(
+            create_result.is_ok(),
+            "Failed to create change set for delete test: {:?}",
+            create_result.err()
+        );
+        let (create_response, _logs) = create_result.unwrap();
+        let change_set_id = create_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .expect("Created change set response did not contain an ID")
+            .to_string();
+
+        // Add a small delay to allow the system to process the creation if needed
+        sleep(std::time::Duration::from_millis(100)).await;
+
+        // 2. Delete the created change set
+        // Assume api_client::delete_change_set exists
+        let delete_result =
+            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+
+        assert!(
+            delete_result.is_ok(),
+            "API call to delete change set should return Ok. Error: {:?}",
+            delete_result.err()
+        );
+
+        // Add explicit type annotation
+        let (delete_response, _logs): (
+            api_models::DeleteChangeSetV1Response,
+            Vec<String>,
+        ) = delete_result.unwrap();
+
+        // Check the structure based on DeleteChangeSetV1Response
+        assert!(
+            delete_response.success,
+            "Response should indicate success (success: true)"
+        );
+
+        // Optional: Verify deletion by trying to GET the change set again (expecting an error)
+        // sleep(std::time::Duration::from_millis(100)).await; // Delay before checking
+        // let get_result_after_delete = api_client::get_change_set(&workspace_id, &change_set_id).await;
+        // assert!(get_result_after_delete.is_err(), "Getting the change set after deletion should fail.");
+        // Note: The exact error type/status code for getting a deleted change set isn't specified,
+        // so checking for `is_err()` is a basic verification.
+    }
+
+    // TODO: Add tests for other change set operations (apply, etc.)
 }

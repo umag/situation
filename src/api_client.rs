@@ -17,7 +17,8 @@ use crate::api_models::{
     ApiError,
     CreateChangeSetV1Request,
     CreateChangeSetV1Response,
-    GetChangeSetV1Response, // Added GetChangeSetV1Response
+    DeleteChangeSetV1Response, // Added DeleteChangeSetV1Response
+    GetChangeSetV1Response,    // Added GetChangeSetV1Response
     ListChangeSetV1Response,
     WhoamiResponse,
 };
@@ -321,6 +322,87 @@ pub async fn get_change_set(
             )
         })?;
         Ok((get_response, logs))
+    } else {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error body".to_string());
+        logs.push(format!("API Error Body: {}", error_text));
+        let error_message = match serde_json::from_str::<ApiError>(&error_text)
+        {
+            Ok(api_error) => format!(
+                "API request failed with status {}: Code {:?}, Message: {}",
+                status, api_error.code, api_error.message
+            ),
+            Err(_) => format!(
+                "API request failed with status {}: {}",
+                status, error_text
+            ),
+        };
+        Err(error_message.into())
+    }
+}
+
+/// Deletes a specific change set by its ID.
+/// Corresponds to `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}`.
+/// Operation ID: `abandon_change_set`
+///
+/// # Arguments
+/// * `workspace_id` - The ID of the workspace containing the change set.
+/// * `change_set_id` - The ID of the change set to delete.
+///
+/// # Returns
+/// A `Result` containing the `DeleteChangeSetV1Response` on success, or an error string on failure.
+/// Also returns a `Vec<String>` containing logs generated during the call.
+///
+/// # Intention
+/// Provides the functionality to abandon/delete a change set via the API.
+///
+/// # Design
+/// - Constructs the specific URL for the change set deletion endpoint.
+/// - Uses the shared `reqwest` client and configuration (via `get_api_config`).
+/// - Sends an HTTP DELETE request.
+/// - Handles success and error responses similarly to other API client functions.
+/// - Deserializes the success response into `DeleteChangeSetV1Response`.
+/// - Logs relevant information about the request and response.
+pub async fn delete_change_set(
+    workspace_id: &str,
+    change_set_id: &str,
+) -> Result<
+    (DeleteChangeSetV1Response, Vec<String>),
+    Box<dyn Error + Send + Sync>,
+> {
+    let mut logs = Vec::new();
+    #[cfg(test)]
+    let config_holder = get_api_config()?;
+    #[cfg(test)]
+    let config = &config_holder;
+
+    #[cfg(not(test))]
+    let config = get_api_config()?;
+
+    let url = format!(
+        "{}/v1/w/{}/change-sets/{}",
+        config.base_url, workspace_id, change_set_id
+    );
+    logs.push(format!("Calling API: DELETE {}", url));
+
+    let response = config.client.delete(&url).send().await?;
+
+    let status = response.status();
+    logs.push(format!("API Response Status: {}", status));
+
+    if status.is_success() {
+        let response_text = response.text().await?;
+        logs.push(format!("API Success Body: {}", response_text));
+        let delete_response: DeleteChangeSetV1Response =
+            serde_json::from_str(&response_text).map_err(|e| {
+                format!(
+                    "Failed to deserialize delete change set response: {} - Body: {}",
+                    e, response_text
+                )
+            })?;
+        Ok((delete_response, logs))
     } else {
         let error_text = response
             .text()

@@ -120,6 +120,16 @@ pub struct GetChangeSetV1Response {
     pub change_set: serde_json::Value,
 }
 
+/// Response for DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}
+/// Intention: Represents the successful deletion confirmation from the API.
+/// Design: Simple struct with a boolean flag as defined in the OpenAPI schema `DeleteChangeSetV1Response`.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteChangeSetV1Response {
+    /// Indicates whether the deletion was successful.
+    pub success: bool,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
 // for other endpoints like Components, etc.
 // Examples:

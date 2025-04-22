@@ -57,6 +57,16 @@ pub fn ui(f: &mut Frame, app: &App) {
 
 // --- Helper Functions ---
 
+// Intention: Get the appropriate style for a top bar trigger based on focus state.
+// Design Choice: Centralizes the focus style logic to avoid duplication.
+fn get_trigger_style(is_focused: bool) -> Style {
+    if is_focused {
+        Style::default().bg(Color::Blue).fg(Color::White) // Focused style
+    } else {
+        Style::default() // Normal style
+    }
+}
+
 // Intention: Render the top bar containing Workspace trigger, Change Set trigger, and Email.
 // Design Choice: Encapsulates the horizontal layout and widget rendering for the top bar.
 // Returns the Rect of the Change Set trigger area for dropdown positioning.
@@ -79,13 +89,10 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
         .whoami_data
         .as_ref()
         .map_or("Loading...", |d| &d.workspace_id);
-    let ws_style = if app.dropdown_focus == DropdownFocus::Workspace
-        && app.input_mode == InputMode::Normal
-    {
-        Style::default().bg(Color::Blue).fg(Color::White)
-    } else {
-        Style::default()
-    };
+    // Use helper function to get style
+    let ws_is_focused = app.dropdown_focus == DropdownFocus::Workspace
+        && app.input_mode == InputMode::Normal;
+    let ws_style = get_trigger_style(ws_is_focused);
     let ws_line = Line::from(vec![
         Span::raw(" Workspace: "),
         Span::styled(ws_name, Style::default().fg(Color::Cyan)),
@@ -107,13 +114,10 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
     } else {
         "▶"
     };
-    let cs_style = if app.dropdown_focus == DropdownFocus::ChangeSet
-        && app.input_mode == InputMode::Normal
-    {
-        Style::default().bg(Color::Blue).fg(Color::White)
-    } else {
-        Style::default()
-    };
+    // Use helper function to get style
+    let cs_is_focused = app.dropdown_focus == DropdownFocus::ChangeSet
+        && app.input_mode == InputMode::Normal;
+    let cs_style = get_trigger_style(cs_is_focused);
     let cs_line = Line::from(vec![
         Span::raw(" Change Set: "),
         Span::styled(selected_cs_name, Style::default().fg(Color::Yellow)),

@@ -19,7 +19,7 @@ mod tests {
     /// Design: Calls `situation::whoami().await` and asserts that the result is Ok,
     ///         the WhoamiResponse contains non-empty user/workspace info, and logs are returned.
     #[tokio::test]
-    #[ignore = "Requires valid .env configuration and running API"] // Ignore by default
+    // #[ignore = "Requires valid .env configuration and running API"] // Removed: Ignore by default, now enabled by user
     async fn test_whoami_endpoint_success() {
         // Ensure .env is loaded (dotenvy is called within get_api_config)
         let result = whoami().await;

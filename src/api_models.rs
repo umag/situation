@@ -87,8 +87,28 @@ pub struct ListChangeSetV1Response {
     pub change_sets: Vec<ChangeSetSummary>,
 }
 
+/// Represents the request body for the `POST /v1/w/{workspace_id}/change-sets` endpoint.
+/// Based on the schema `CreateChangeSetV1Request` in openapi.json.
+#[derive(Debug, serde::Serialize, Clone)] // Use Serialize for request bodies
+#[serde(rename_all = "camelCase")]
+pub struct CreateChangeSetV1Request {
+    /// The desired name for the new change set.
+    pub change_set_name: String,
+}
+
+/// Represents the response from the `POST /v1/w/{workspace_id}/change-sets` endpoint.
+/// Based on the schema `CreateChangeSetV1Response` in openapi.json.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateChangeSetV1Response {
+    /// Contains details of the created change set. The exact structure is not fully
+    /// specified in the OpenAPI schema (just `{"type": "object"}`), so we use `serde_json::Value`
+    /// to capture whatever object is returned.
+    #[serde(rename = "changeSet")] // Match the exact name from OpenAPI
+    pub change_set: serde_json::Value,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
 // for other endpoints like Change Sets, Components, etc.
 // Examples:
-// pub struct CreateChangeSetV1Request { ... }
 // pub struct GetComponentV1Response { ... }

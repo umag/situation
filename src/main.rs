@@ -12,14 +12,14 @@ use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style}, // Added Style, Color, Modifier for highlighting
-    text::Line,
+    // text::Line, // Removed unused Line
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}, // Added List, ListItem, ListState
 };
 use tokio;
 
 // Use the library crate 'situation' to access shared modules
 use situation::api_client;
-use situation::api_models::{self, ChangeSetSummary, WhoamiResponse}; // Import models via library
+use situation::api_models::WhoamiResponse; // Removed unused ChangeSetSummary import
 
 use std::{cmp::min, error::Error, io, time::Duration};
 
@@ -32,7 +32,8 @@ use std::{cmp::min, error::Error, io, time::Duration};
 #[derive(Debug, Clone)]
 struct App {
     whoami_data: Option<WhoamiResponse>,
-    change_sets: Option<Vec<ChangeSetSummary>>,
+    // Use fully qualified path for ChangeSetSummary just in case
+    change_sets: Option<Vec<situation::api_models::ChangeSetSummary>>,
     change_set_list_state: ListState, // Added state for the change set list
     logs: Vec<String>,
     log_scroll: usize,

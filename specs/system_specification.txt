@@ -28,6 +28,7 @@ This application provides a terminal user interface (TUI) for interacting with t
 - Implements API calls for:
     - `/whoami` (in `api_client::whoami`)
     - `GET /v1/w/{workspace_id}/change-sets` (in `api_client::list_change_sets`)
+    - `POST /v1/w/{workspace_id}/change-sets` (in `api_client::create_change_set`)
 - The main binary is defined in `src/main.rs` and uses the library.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
@@ -59,7 +60,7 @@ This application provides a terminal user interface (TUI) for interacting with t
 ## 8. Testing
 - Integration tests are located in `tests/api/`.
     - Implemented test for `/whoami` exists in `tests/api/whoami.rs` (requires valid `.env`, ignored by default).
-    - Placeholder test for `GET /change_set` exists in `tests/api/change_sets.rs`.
+    - Implemented tests for `GET` and `POST` on `/v1/w/{workspace_id}/change-sets` exist in `tests/api/change_sets.rs` (require valid `.env`, ignored by default).
 - Unit tests are located in `tests/unit/`.
     - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
     - Unit tests for `App` state logic were removed due to difficulty testing binary internals from `tests/`.

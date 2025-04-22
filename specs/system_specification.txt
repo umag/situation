@@ -65,7 +65,7 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Change Set Dropdown (conditional overlay): If `changeset_dropdown_active` is true, displays a selectable list of change sets below the Change Set trigger. Items are color-coded based on their status (e.g., Completed: Green, Failed: Red, InProgress: Yellow, Abandoned: Gray).
     - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title. Logs automatically scroll to the bottom when new entries are added.
     - Input line (1 line, bottom, conditional): Displays the input prompt and buffer when `input_mode` is `ChangeSetName`.
-- The UI rendering logic is defined in the `ui` function in `src/ui.rs`.
+- The UI rendering logic is defined in `src/ui.rs`. The main `ui` function sets up the layout and calls helper functions (e.g., `render_top_bar`, `render_content_area`, `render_log_panel`, `render_input_line`, `render_changeset_dropdown`) to render specific parts of the interface.
 
 ## 6. Event Handling
 - Main event loop is the asynchronous `run_app` function defined in `src/run_app.rs`.
@@ -132,6 +132,7 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Handles text input (characters, Backspace, Esc, Enter) in ChangeSetName mode.
     - Allows quitting ('q').
 - Integration tests exist for API client functions.
-- Unit tests exist for API model deserialization and App state (including log scrolling).
+- Unit tests exist for API model deserialization and App state (including log scrolling). A basic smoke test for UI rendering (`tests/unit/ui_rendering.rs`) ensures the main `ui` function doesn't panic.
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.
+- **Note:** (2025-04-22) The `ui` function in `src/ui.rs` was refactored into smaller helper functions for better organization.

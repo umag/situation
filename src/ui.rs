@@ -11,15 +11,14 @@ use ratatui::{
     widgets::{
         Block, Borders, Clear, HighlightSpacing, List, ListItem, Paragraph,
         Wrap,
-    }, // Added Clear, HighlightSpacing, Removed unused ListState
+    }, // Added Clear, HighlightSpacing
 };
 
-// Intention: Define the UI layout and render widgets based on application state.
-// Design Choice: Top bar with dropdown triggers, main area for details, logs at the bottom.
-// Dropdown list rendered conditionally as an overlay.
+// Intention: Main UI rendering function. Sets up the layout and calls helper functions for each section.
+// Design Choice: Split rendering logic into focused helper functions for clarity and maintainability.
 pub fn ui(f: &mut Frame, app: &App) {
-    // Intention: Define main layout: Top Bar, Main Content, Logs, optional Input Line.
-    let log_height = 10;
+    // Define main layout: Top Bar, Main Content, Logs, optional Input Line.
+    let log_height = 10; // Keep log height definition here for layout calculation
     let (log_constraint, input_constraint) =
         if app.input_mode == InputMode::ChangeSetName {
             (Constraint::Length(log_height), Constraint::Length(1))
@@ -43,12 +42,25 @@ pub fn ui(f: &mut Frame, app: &App) {
     let input_area = if main_chunks.len() > 3 {
         Some(main_chunks[3])
     } else {
-        None
+        None // Input area is optional
     };
 
-    // --- Top Bar Rendering ---
-    // Intention: Display Workspace trigger, Change Set trigger, and Email.
-    // Design Choice: Horizontal layout. Highlight focused trigger.
+    // Call helper functions to render each part of the UI
+    let cs_trigger_area = render_top_bar(f, app, top_bar_area);
+    render_content_area(f, app, content_area);
+    render_log_panel(f, app, log_area);
+    if let Some(input_area_rect) = input_area {
+        render_input_line(f, app, input_area_rect);
+    }
+    render_changeset_dropdown(f, app, cs_trigger_area); // Needs cs_trigger_area for positioning
+}
+
+// --- Helper Functions ---
+
+// Intention: Render the top bar containing Workspace trigger, Change Set trigger, and Email.
+// Design Choice: Encapsulates the horizontal layout and widget rendering for the top bar.
+// Returns the Rect of the Change Set trigger area for dropdown positioning.
+fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
     let top_bar_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -56,13 +68,13 @@ pub fn ui(f: &mut Frame, app: &App) {
             Constraint::Percentage(40), // Change Set trigger
             Constraint::Percentage(30), // Email
         ])
-        .split(top_bar_area);
+        .split(area);
 
     let ws_trigger_area = top_bar_chunks[0];
     let cs_trigger_area = top_bar_chunks[1];
     let email_area = top_bar_chunks[2];
 
-    // Workspace Trigger (Static for now)
+    // Workspace Trigger
     let ws_name = app
         .whoami_data
         .as_ref()
@@ -70,28 +82,26 @@ pub fn ui(f: &mut Frame, app: &App) {
     let ws_style = if app.dropdown_focus == DropdownFocus::Workspace
         && app.input_mode == InputMode::Normal
     {
-        Style::default().bg(Color::Blue).fg(Color::White) // Focused style
+        Style::default().bg(Color::Blue).fg(Color::White)
     } else {
-        Style::default() // Normal style for the whole paragraph background/focus
+        Style::default()
     };
-    // Intention: Display workspace name with color.
-    // Design Choice: Use Spans within a Line to apply color only to the name.
     let ws_line = Line::from(vec![
         Span::raw(" Workspace: "),
-        Span::styled(ws_name, Style::default().fg(Color::Cyan)), // Apply Cyan color here
+        Span::styled(ws_name, Style::default().fg(Color::Cyan)),
         Span::raw(" "),
     ]);
     let ws_trigger = Paragraph::new(ws_line)
-        .style(ws_style) // Apply focus style to the whole paragraph
+        .style(ws_style)
         .block(Block::default());
     f.render_widget(ws_trigger, ws_trigger_area);
 
     // Change Set Trigger
-    let (selected_cs_name, selected_cs_status) =
-        app.get_selected_changeset_summary().map_or(
-            ("Select Change Set".to_string(), "".to_string()), // Default text
-            |cs| (cs.name.clone(), format!(" ({})", cs.status)), // Extract name and status
-        );
+    let (selected_cs_name, selected_cs_status) = app
+        .get_selected_changeset_summary()
+        .map_or(("Select Change Set".to_string(), "".to_string()), |cs| {
+            (cs.name.clone(), format!(" ({})", cs.status))
+        });
     let cs_indicator = if app.changeset_dropdown_active {
         "▼"
     } else {
@@ -100,22 +110,20 @@ pub fn ui(f: &mut Frame, app: &App) {
     let cs_style = if app.dropdown_focus == DropdownFocus::ChangeSet
         && app.input_mode == InputMode::Normal
     {
-        Style::default().bg(Color::Blue).fg(Color::White) // Focused style
+        Style::default().bg(Color::Blue).fg(Color::White)
     } else {
-        Style::default() // Normal style for the whole paragraph background/focus
+        Style::default()
     };
-    // Intention: Display change set name with color.
-    // Design Choice: Use Spans within a Line to apply color only to the name.
     let cs_line = Line::from(vec![
         Span::raw(" Change Set: "),
-        Span::styled(selected_cs_name, Style::default().fg(Color::Yellow)), // Apply Yellow color here
-        Span::raw(selected_cs_status), // Status without color
+        Span::styled(selected_cs_name, Style::default().fg(Color::Yellow)),
+        Span::raw(selected_cs_status),
         Span::raw(" "),
         Span::raw(cs_indicator),
         Span::raw(" "),
     ]);
     let cs_trigger = Paragraph::new(cs_line)
-        .style(cs_style) // Apply focus style to the whole paragraph
+        .style(cs_style)
         .block(Block::default());
     f.render_widget(cs_trigger, cs_trigger_area);
 
@@ -128,17 +136,18 @@ pub fn ui(f: &mut Frame, app: &App) {
         Paragraph::new(email_text).alignment(Alignment::Right);
     f.render_widget(email_paragraph, email_area);
 
-    // --- Main Content Area (Details) ---
-    // Intention: Display details of the selected change set.
-    // Design Choice: Render details if available, otherwise show placeholder. Use a simpler title.
-    let details_block = Block::default()
-        .title("Details") // Simplified title
-        .borders(Borders::ALL);
-    let inner_details_area = details_block.inner(content_area);
-    f.render_widget(details_block, content_area);
+    cs_trigger_area // Return this area for dropdown positioning
+}
 
-    // Intention: Display keybindings in the main content area.
-    // Design Choice: Use a static list of Lines in a Paragraph, replacing the previous details view.
+// Intention: Render the main content area, currently displaying static keybindings.
+// Design Choice: Encapsulates the "Details" block and the keybindings paragraph.
+fn render_content_area(f: &mut Frame, _app: &App, area: Rect) {
+    // _app is unused for now, but kept for potential future use (e.g., showing details)
+    let details_block = Block::default().title("Details").borders(Borders::ALL);
+    let inner_details_area = details_block.inner(area);
+    f.render_widget(details_block, area);
+
+    // Keybindings (Static for now)
     let keybindings = vec![
         Line::from(Span::styled(
             "--- Keybindings ---",
@@ -182,55 +191,64 @@ pub fn ui(f: &mut Frame, app: &App) {
     let keybindings_paragraph =
         Paragraph::new(keybindings).wrap(Wrap { trim: true });
     f.render_widget(keybindings_paragraph, inner_details_area);
+}
 
-    // --- Log Window Rendering (Bottom) ---
-    let log_block = Block::default()
-        .title("Logs (j/k: Scroll)")
-        .borders(Borders::ALL);
-    let inner_log_area = log_block.inner(log_area);
-    f.render_widget(log_block, log_area);
+// Intention: Render the log panel at the bottom.
+// Design Choice: Encapsulates the log block (with dynamic title) and the scrollable log paragraph.
+fn render_log_panel(f: &mut Frame, app: &App, area: Rect) {
+    let log_title = if let Some(action) = &app.current_action {
+        format!("Logs (j/k: Scroll) - [{}]", action)
+    } else {
+        "Logs (j/k: Scroll)".to_string()
+    };
+    let log_block = Block::default().title(log_title).borders(Borders::ALL);
+    let inner_log_area = log_block.inner(area); // Calculate inner area once
 
-    let log_lines: Vec<ratatui::text::Line> = app
+    f.render_widget(log_block, area); // Render the block (border + title)
+
+    let log_lines: Vec<Line> = app
         .logs
         .iter()
-        .map(|log| ratatui::text::Line::from(log.as_str()))
+        .map(|log| Line::from(log.as_str()))
         .collect();
     let log_paragraph = Paragraph::new(log_lines)
         .wrap(Wrap { trim: false })
         .scroll((app.log_scroll as u16, 0));
-    // Store the paragraph before rendering it the first time
-    let log_paragraph_clone = log_paragraph.clone();
-    f.render_widget(log_paragraph, inner_log_area);
 
-    // --- Input Line Rendering (Conditional, Bottom) ---
-    if let Some(input_area) = input_area {
-        if app.input_mode == InputMode::ChangeSetName {
-            let input_prompt_text =
-                "Enter Change Set Name (Esc: Cancel, Enter: Create):";
-            let input_paragraph = Paragraph::new(format!(
-                "{} {}{}",
-                input_prompt_text,
-                app.input_buffer,
-                "_" // Simple cursor indicator
-            ))
-            .style(Style::default().fg(Color::Yellow));
-            f.render_widget(input_paragraph, input_area);
-        }
+    f.render_widget(log_paragraph, inner_log_area); // Render the paragraph inside
+}
+
+// Intention: Render the input line when in ChangeSetName mode.
+// Design Choice: Encapsulates the conditional rendering of the input prompt and buffer.
+fn render_input_line(f: &mut Frame, app: &App, area: Rect) {
+    if app.input_mode == InputMode::ChangeSetName {
+        let input_prompt_text =
+            "Enter Change Set Name (Esc: Cancel, Enter: Create):";
+        let input_paragraph = Paragraph::new(format!(
+            "{} {}{}",
+            input_prompt_text,
+            app.input_buffer,
+            "_" // Simple cursor indicator
+        ))
+        .style(Style::default().fg(Color::Yellow));
+        f.render_widget(input_paragraph, area);
     }
+}
 
-    // --- Change Set Dropdown List (Overlay) ---
-    // Intention: Render the dropdown list if active.
-    // Design Choice: Render last, potentially overlapping content. Use Clear widget first.
+// Intention: Render the Change Set dropdown list overlay if active.
+// Design Choice: Encapsulates the logic for calculating dropdown position, creating list items,
+// and rendering the stateful List widget. Requires the Change Set trigger area for positioning.
+fn render_changeset_dropdown(f: &mut Frame, app: &App, cs_trigger_area: Rect) {
     if app.changeset_dropdown_active {
         let list_height =
             app.change_sets.as_ref().map_or(1, |cs| cs.len()).min(10) as u16
-                + 2; // Max 10 items + borders
-        let list_width = 50; // Fixed width for dropdown
+                + 2;
+        let list_width = 50; // Fixed width
 
         // Calculate position below the trigger
         let list_area = Rect {
             x: cs_trigger_area.x,
-            y: cs_trigger_area.y + 1, // Position below the trigger
+            y: cs_trigger_area.y + 1,
             width: list_width.min(f.size().width - cs_trigger_area.x), // Clamp width
             height: list_height.min(f.size().height - (cs_trigger_area.y + 1)), // Clamp height
         };
@@ -244,8 +262,6 @@ pub fn ui(f: &mut Frame, app: &App) {
                     change_sets
                         .iter()
                         .map(|cs| {
-                            // Intention: Apply color based on change set status.
-                            // Design Choice: Map specific status strings to colors. Default otherwise.
                             let status_style = match cs.status.as_str() {
                                 "Completed" => {
                                     Style::default().fg(Color::Green)
@@ -255,13 +271,13 @@ pub fn ui(f: &mut Frame, app: &App) {
                                     Style::default().fg(Color::Yellow)
                                 }
                                 "Abandoned" => Style::default().fg(Color::Gray),
-                                _ => Style::default(), // Default style for other statuses
+                                _ => Style::default(),
                             };
                             ListItem::new(format!(
                                 "{} ({}) - {}",
                                 cs.name, cs.status, cs.id
                             ))
-                            .style(status_style) // Apply the style to the ListItem
+                            .style(status_style)
                         })
                         .collect()
                 }
@@ -281,25 +297,37 @@ pub fn ui(f: &mut Frame, app: &App) {
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("> ")
-            .highlight_spacing(HighlightSpacing::Always); // Ensure highlight shows even if list loses focus conceptually
+            .highlight_spacing(HighlightSpacing::Always);
 
         // Render the dropdown list
-        // Use Clear widget first to ensure it draws cleanly over existing content
-        f.render_widget(Clear, list_area);
+        f.render_widget(Clear, list_area); // Clear the area first
         let mut list_state = app.change_set_list_state.clone(); // Clone state for rendering
         f.render_stateful_widget(dropdown_list, list_area, &mut list_state);
     }
+}
 
-    // Display current action in the log area title bar maybe? Or keep it simple.
-    // Let's add it to the log title
-    let log_title = if let Some(action) = &app.current_action {
-        format!("Logs (j/k: Scroll) - [{}]", action)
-    } else {
-        "Logs (j/k: Scroll)".to_string()
-    };
-    let log_block_with_title =
-        Block::default().title(log_title).borders(Borders::ALL);
-    f.render_widget(log_block_with_title, log_area); // Re-render block with potentially updated title
-    // Re-render paragraph inside
-    f.render_widget(log_paragraph_clone, inner_log_area); // Render the stored paragraph again
+// --- Unit Tests ---
+#[cfg(test)]
+mod tests {
+    use super::*; // Import items from parent module (ui)
+    use crate::app::App; // Import App from crate root
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend; // Required for terminal.draw()
+
+    #[test]
+    fn test_ui_renders_without_panic() {
+        // Intention: Verify that the main ui function can execute with default state without panicking.
+        // Design Choice: Use TestBackend and terminal.draw(). Panic will be caught by test runner.
+        let backend = TestBackend::new(80, 24); // Arbitrary size
+        let mut terminal = Terminal::new(backend).unwrap();
+        let app = App::new(); // Use the App::new() constructor
+
+        // The actual test is whether this call panics or not.
+        // If it panics, the test framework will catch it and fail the test.
+        terminal
+            .draw(|f| {
+                ui(f, &app); // Call the ui function from the parent module
+            })
+            .expect("UI rendering failed"); // Use expect for a clearer error if draw itself fails
+    }
 }

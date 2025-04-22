@@ -41,12 +41,12 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::delete_change_set`)
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/merge_status` (in `api_client::get_merge_status`)
     - `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/force_apply` (in `api_client::force_apply_change_set`)
-- The main binary is defined in `src/main.rs` and uses the library.
+- The main binary entry point is defined in `src/main.rs`, which sets up the terminal and calls the main application loop. It declares `app`, `refresh_change_sets`, `run_app`, and `ui` as modules.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
 ## 5. TUI Layout & State
 - The TUI displays data retrieved from the API.
-- Application state is managed in the `App` struct in `src/main.rs`. Includes:
+- Application state is managed in the `App` struct defined in `src/app.rs`. Includes:
     - `whoami_data`: Data from `/whoami`.
     - `change_sets`: List of `ChangeSetSummary`.
     - `change_set_list_state`: `ListState` for the change set list.
@@ -65,9 +65,10 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Change Set Dropdown (conditional overlay): If `changeset_dropdown_active` is true, displays a selectable list of change sets below the Change Set trigger.
     - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title. Logs automatically scroll to the bottom when new entries are added.
     - Input line (1 line, bottom, conditional): Displays the input prompt and buffer when `input_mode` is `ChangeSetName`.
+- The UI rendering logic is defined in the `ui` function in `src/ui.rs`.
 
 ## 6. Event Handling
-- Main event loop in `run_app` is asynchronous (`async fn`).
+- Main event loop is the asynchronous `run_app` function defined in `src/run_app.rs`.
 - Handles keyboard input:
     - **Normal Mode (Dropdown Closed):**
         - 'q': Quit the application.
@@ -86,14 +87,15 @@ This application provides a terminal user interface (TUI) for interacting with t
         - Enter: Selects the highlighted item, closes the dropdown (`changeset_dropdown_active` = false), clears details (requires explicit fetch).
         - Esc / Tab: Closes the dropdown (`changeset_dropdown_active` = false) without changing selection. Tab also switches focus.
     - **ChangeSetName Mode:**
-        - Enter: Submits the entered name (`input_buffer`) to create a new change set using `create_change_set`. Refreshes list, returns to Normal mode.
+        - Enter: Submits the entered name (`input_buffer`) to create a new change set using `create_change_set`. Refreshes list, **automatically selects the newly created change set**, and returns to Normal mode.
         - Esc: Cancel input, clear buffer, and return to Normal mode.
         - Backspace: Delete the last character from the input buffer.
         - Character input: Append character to the input buffer.
-- Uses a helper function `refresh_change_sets` to reload the change set list after create, delete, or apply actions.
+- Uses the helper function `refresh_change_sets` (defined in `src/refresh_change_sets.rs`) to reload the change set list after create, delete, or apply actions.
+- Includes a method `App::select_change_set_by_id` to programmatically select a change set based on its ID.
 
 ## 7. Error Handling
-- Basic terminal setup/teardown error handling is in place.
+- Basic terminal setup/teardown error handling is in place within `src/main.rs`.
 - API client functions return `Result<(ResponseType, Vec<String>), Box<dyn Error>>` to propagate errors and logs.
 - Errors during API calls in `run_app` are logged to the TUI's log window (with auto-scroll).
 - The `current_action` state provides user feedback during potentially long-running API calls.
@@ -104,18 +106,19 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Tests cover `/whoami` and change set operations (`list`, `create`, `get`, `delete`, `merge_status`).
 - Unit tests are located in `tests/unit/`.
     - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
-    - Unit tests for `App` state logic (including manual and automatic log scrolling) exist in `tests/unit/app_state.rs`.
+    - Unit tests for `App` state logic (including manual and automatic log scrolling) exist in `tests/unit/app_state.rs`. (Note: These tests might need path updates after the refactor).
 - Test modules (`api`, `unit`) are declared in the main test file `tests/api_calls.rs`.
 - API test modules (`change_sets`, `whoami`) are declared in `tests/api/mod.rs`.
 - Unit test modules (`api_models`, `app_state`) are declared in `tests/unit/mod.rs`.
-- **TODO:** Add tests for TUI interactions and state management.
+- **TODO:** Add tests for TUI interactions and state management. Update `app_state.rs` tests for new module paths.
 
-## 9. Current Status (as of 2025-04-22 - Auto Scroll Update)
+## 9. Current Status (as of 2025-04-22 - Split main.rs)
 - Project refactored into a library (`src/lib.rs`) and a binary (`src/main.rs`).
+- `src/main.rs` was further split into modules: `app.rs`, `refresh_change_sets.rs`, `run_app.rs`, `ui.rs`. `main.rs` now only contains the entry point and module declarations.
 - API client and models are in the library.
 - API client uses `reqwest` and lazy static config from `.env`.
 - All specified changeset API endpoints are implemented in the client.
-- TUI (`main.rs`) implemented (as of 2025-04-22 - Color Update):
+- TUI implemented (split across `run_app.rs` for logic and `ui.rs` for rendering):
     - Fetches and displays `/whoami` data (Workspace ID, Email) on startup.
     - Top bar displays Workspace trigger (static, ID in Cyan), Change Set dropdown trigger (selected name in Yellow), and Email. Focus is switchable via Tab and highlighted.
     - Change Set trigger (Enter/Space) opens/closes a dropdown list of available change sets.

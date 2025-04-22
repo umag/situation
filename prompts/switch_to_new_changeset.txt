@@ -1,0 +1,1 @@
+Modify the application so that after a new change set is successfully created via the API, the application state updates to select this newly created change set automatically. This improves user experience by immediately focusing on the new context.

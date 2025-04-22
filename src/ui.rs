@@ -244,10 +244,24 @@ pub fn ui(f: &mut Frame, app: &App) {
                     change_sets
                         .iter()
                         .map(|cs| {
+                            // Intention: Apply color based on change set status.
+                            // Design Choice: Map specific status strings to colors. Default otherwise.
+                            let status_style = match cs.status.as_str() {
+                                "Completed" => {
+                                    Style::default().fg(Color::Green)
+                                }
+                                "Failed" => Style::default().fg(Color::Red),
+                                "InProgress" => {
+                                    Style::default().fg(Color::Yellow)
+                                }
+                                "Abandoned" => Style::default().fg(Color::Gray),
+                                _ => Style::default(), // Default style for other statuses
+                            };
                             ListItem::new(format!(
                                 "{} ({}) - {}",
                                 cs.name, cs.status, cs.id
                             ))
+                            .style(status_style) // Apply the style to the ListItem
                         })
                         .collect()
                 }

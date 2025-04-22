@@ -32,10 +32,7 @@ mod tests {
 
         if let Ok((response, logs)) = result {
             // Check that essential fields are present and not empty
-            assert!(
-                !response.user_id.is_empty(),
-                "User ID should not be empty"
-            );
+            assert!(!response.user_id.is_empty(), "User ID should not be empty");
             assert!(
                 !response.user_email.is_empty(),
                 "User Email should not be empty"

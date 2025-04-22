@@ -17,6 +17,7 @@ This application provides a terminal user interface (TUI) for interacting with t
 - Base API URL is loaded from the `SI_API` variable in the `.env` file.
 - Authentication uses a JWT token loaded from the `JWT_TOKEN` variable in the `.env` file.
 - The OpenAPI schema is defined in `openapi.json`.
+- A detailed specification of the implemented server-side API endpoints can be found in `specs/api_specification.md`.
 
 ## 4. API Client Implementation
 - Core logic (API client, models) is defined in the library (`src/lib.rs`).
@@ -31,16 +32,21 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `ListChangeSetV1Response`
     - `CreateChangeSetV1Request`, `CreateChangeSetV1Response`
     - `GetChangeSetV1Response`
-    - `DeleteChangeSetV1Response`
+    - `DeleteChangeSetV1Response` (Response for abandon operation)
     - `MergeStatusV1Response`, `MergeStatusV1ResponseAction`, `MergeStatusV1ResponseActionComponent`
+    - Component Models: `CreateComponentV1Request`, `CreateComponentV1Response`, `GetComponentV1Response`, `UpdateComponentV1Request`, `UpdateComponentV1Response`, `DeleteComponentV1Response`, `Connection`, `ConnectionPoint`, etc.
 - Implements API calls for:
     - `/whoami` (in `api_client::whoami`)
     - `GET /v1/w/{workspace_id}/change-sets` (in `api_client::list_change_sets`)
     - `POST /v1/w/{workspace_id}/change-sets` (in `api_client::create_change_set`)
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::get_change_set`)
-    - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::delete_change_set`)
+    - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::abandon_change_set`)
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/merge_status` (in `api_client::get_merge_status`)
-    - `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/force_apply` (in `api_client::force_apply_change_set`)
+    - `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/force_apply` (in `api_client::force_apply`)
+    - `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/components` (in `api_client::create_component`)
+    - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}` (in `api_client::get_component`)
+    - `PUT /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}` (in `api_client::update_component`)
+    - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}` (in `api_client::delete_component`)
 - The main binary entry point is defined in `src/main.rs`, which sets up the terminal and calls the main application loop. It declares `app`, `refresh_change_sets`, `run_app`, and `ui` as modules.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
@@ -77,8 +83,8 @@ This application provides a terminal user interface (TUI) for interacting with t
             - Workspace: (Currently no action).
             - Change Set: Opens the change set dropdown list (`changeset_dropdown_active` = true). If an item is selected, also fetches details/status using `get_change_set` and `get_merge_status`.
         - 'c': Enter `ChangeSetName` input mode.
-        - 'd': Delete the *currently selected* change set (from `change_set_list_state`) using `delete_change_set`. Refreshes list.
-        - 'f': Force apply the *currently selected* change set using `force_apply_change_set`. Refreshes list.
+        - 'd': Abandon the *currently selected* change set (from `change_set_list_state`) using `abandon_change_set`. Refreshes list.
+        - 'f': Force apply the *currently selected* change set using `force_apply`. Refreshes list.
         - 'k': Manually scroll the log window up.
         - 'j': Manually scroll the log window down.
     - **Normal Mode (Change Set Dropdown Active):**
@@ -103,12 +109,13 @@ This application provides a terminal user interface (TUI) for interacting with t
 
 ## 8. Testing
 - Integration tests for API client functions are located in `tests/api/`.
-    - Tests cover `/whoami` and change set operations (`list`, `create`, `get`, `delete`, `merge_status`).
+    - Tests cover `/whoami` and change set operations (`list`, `create`, `get`, `abandon`, `merge_status`, `force_apply`).
+    - Tests cover component operations (`create`, `get`, `update`, `delete`) in `tests/api/components.rs`.
 - Unit tests are located in `tests/unit/`.
     - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
     - Unit tests for `App` state logic (including manual and automatic log scrolling) exist in `tests/unit/app_state.rs`. (Note: These tests might need path updates after the refactor).
 - Test modules (`api`, `unit`) are declared in the main test file `tests/api_calls.rs`.
-- API test modules (`change_sets`, `whoami`) are declared in `tests/api/mod.rs`.
+- API test modules (`change_sets`, `whoami`, `components`) are declared in `tests/api/mod.rs`.
 - Unit test modules (`api_models`, `app_state`) are declared in `tests/unit/mod.rs`.
 - **TODO:** Add tests for TUI interactions and state management. Update `app_state.rs` tests for new module paths.
 
@@ -117,21 +124,22 @@ This application provides a terminal user interface (TUI) for interacting with t
 - `src/main.rs` was further split into modules: `app.rs`, `refresh_change_sets.rs`, `run_app.rs`, `ui.rs`. `main.rs` now only contains the entry point and module declarations.
 - API client and models are in the library.
 - API client uses `reqwest` and lazy static config from `.env`.
-- All specified changeset API endpoints are implemented in the client.
+- All specified changeset API endpoints are implemented in the client (`whoami`, `list_change_sets`, `create_change_set`, `get_change_set`, `abandon_change_set`, `get_merge_status`, `force_apply`).
+- Component API endpoints (`create_component`, `get_component`, `update_component`, `delete_component`) are implemented in the client.
 - TUI implemented (split across `run_app.rs` for logic and `ui.rs` for rendering):
     - Fetches and displays `/whoami` data (Workspace ID, Email) on startup.
     - Top bar displays Workspace trigger (static, ID in Cyan), Change Set dropdown trigger (selected name in Yellow), and Email. Focus is switchable via Tab and highlighted.
     - Change Set trigger (Enter/Space) opens/closes a dropdown list of available change sets (items are color-coded by status).
     - Dropdown list allows selection via Up/Down arrows. Enter selects, Esc/Tab closes.
-    - Main content area displays change set details and merge status when available, otherwise shows keybindings. Details/status are fetched when selecting a change set or performing actions ('d', 'f').
+    - Main content area displays change set details and merge status when available, otherwise shows keybindings. Details/status are fetched when selecting a change set or performing actions ('d' - abandon, 'f' - apply).
     - Supports creating change sets ('c' enters input mode, Enter submits name).
-    - Supports deleting ('d') and applying ('f') the *selected* change set.
+    - Supports abandoning ('d') and applying ('f') the *selected* change set.
     - Displays API logs and action status messages (in log window title bar). Logs automatically scroll to the bottom when new entries are added.
     - Displays input prompt and buffer (in bottom line) when creating a change set.
     - Handles manual log scrolling (j/k) in Normal mode.
     - Handles text input (characters, Backspace, Esc, Enter) in ChangeSetName mode.
     - Allows quitting ('q').
-- Integration tests exist for API client functions.
+- Integration tests exist for API client functions (change sets, whoami, components).
 - Unit tests exist for API model deserialization and App state (including log scrolling). A basic smoke test for UI rendering (`tests/unit/ui_rendering.rs`) ensures the main `ui` function doesn't panic.
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.

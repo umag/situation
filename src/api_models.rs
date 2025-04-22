@@ -33,7 +33,6 @@ pub struct TokenDetails {
     pub workspace_pk: String,
 }
 
-
 /// Represents the response from the `/whoami` endpoint.
 /// Contains information about the authenticated user and their workspace.
 /// Verification (2025-04-21): Updated based on runtime error. The `token` field is an object, not a string.
@@ -63,9 +62,33 @@ pub struct ApiError {
     pub status_code: u16, // Using u16 for HTTP status codes
 }
 
+/// Represents a summary of a change set, typically used in lists.
+/// Based on the example in openapi.json for ListChangeSetV1Response.
+/// Fields assumed based on the example: {"id":"...", "name":"...", "status":"..."}
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeSetSummary {
+    /// The unique identifier for the change set.
+    pub id: String,
+    /// The user-provided name for the change set.
+    pub name: String,
+    /// The current status of the change set (e.g., "Draft", "Applied").
+    pub status: String,
+    // Note: Add other fields if the actual API response includes more than the example.
+}
+
+/// Represents the response from the `GET /v1/w/{workspace_id}/change-sets` endpoint.
+/// Contains a list of change set summaries.
+/// Based on the schema `ListChangeSetV1Response` in openapi.json.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListChangeSetV1Response {
+    /// A list containing summaries of the available change sets.
+    pub change_sets: Vec<ChangeSetSummary>,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
 // for other endpoints like Change Sets, Components, etc.
 // Examples:
-// pub struct ListChangeSetV1Response { ... }
 // pub struct CreateChangeSetV1Request { ... }
 // pub struct GetComponentV1Response { ... }

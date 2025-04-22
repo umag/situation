@@ -22,22 +22,29 @@ This application provides a terminal user interface (TUI) for interacting with t
 - API calls are handled by functions in `src/api_client.rs`.
 - Uses `reqwest` for HTTP communication.
 - Loads configuration lazily using `std::sync::OnceLock`.
-- Data models corresponding to API responses are defined in `src/api_models.rs` using `serde`.
-- Currently implements the `/whoami` endpoint call.
+- Data models corresponding to API responses are defined in `src/api_models.rs` using `serde` (includes `WhoamiResponse`, `ApiError`, `ListChangeSetV1Response`, `ChangeSetSummary`).
+- Implements API calls for:
+    - `/whoami` (in `api_client::whoami`)
+    - `GET /v1/w/{workspace_id}/change-sets` (in `api_client::list_change_sets`)
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
 ## 5. TUI Layout & State
 - The TUI displays data retrieved from the API.
-- Application state is managed in the `App` struct in `src/main.rs`.
+- Application state is managed in the `App` struct in `src/main.rs` (includes `whoami_data`, `change_sets`, `change_set_list_state`, `logs`, `log_scroll`).
 - Displays the user's email (from `/whoami`) in a top bar (1 line high).
-- Displays other `/whoami` data (User ID, Workspace ID) in the main content area below the top bar.
-- Displays a scrollable log window at the bottom (10 lines high).
+- The main content area is split vertically:
+    - Top part displays `/whoami` data (User ID, Workspace ID).
+    - Bottom part displays a selectable list of change sets (Name, Status, ID) using `ratatui::widgets::List`. The selected item is highlighted.
+- Displays a scrollable log window at the bottom (10 lines high), including logs from API calls.
 
 ## 6. Event Handling
 - Handles basic keyboard input:
     - 'q' to quit.
-    - Up Arrow / 'k' to scroll the log window up.
-    - Down Arrow / 'j' to scroll the log window down.
+    - Up Arrow: Select previous item in the change set list (wraps around).
+    - Down Arrow: Select next item in the change set list (wraps around).
+    - 'k': Scroll the log window up.
+    - 'j': Scroll the log window down.
+    - TODO: Add key for selecting/acting on a change set (e.g., Enter).
 
 ## 7. Error Handling
 - Basic terminal setup/teardown error handling is in place.
@@ -62,6 +69,8 @@ This application provides a terminal user interface (TUI) for interacting with t
 - TUI displays API request/response logs in a scrollable window at the bottom.
 - Handles keyboard input: 'q' to quit, Up/Down/j/k to scroll logs.
 - Placeholder test for `/whoami` exists in `tests/api_calls.rs`.
+- Placeholder test for `GET /change_set` exists in `tests/api/change_sets.rs`.
+- Test modules are organized under the `tests/api/` directory.
 - Specification document updated.
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.

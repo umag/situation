@@ -3,19 +3,19 @@
 // Intention:
 // Provides functions to interact with the Luminork/Systeminit API.
 // Currently contains placeholder implementations until the actual API client
-// (e.g., using luminork crate or reqwest) is determined and implemented.
+// Handles API interactions.
 
 // Design Choices:
 // - Functions are async using `reqwest` for network calls.
 // - Returns `Result` to handle potential errors (env var loading, network, deserialization, API errors).
 // - Uses the data structures defined in `api_models.rs`.
 // - Loads API URL and JWT token from environment variables using `dotenvy`.
-// - Creates a reusable `reqwest::Client`.
+// - Creates a reusable `reqwest::Client` initialized lazily via `OnceLock`.
+// - Returns results containing both the data and logs for TUI display.
 
-use crate::api_models::WhoamiResponse;
+use crate::api_models::{ApiError, ChangeSetSummary, ListChangeSetV1Response, WhoamiResponse}; // Added ListChangeSetV1Response, ChangeSetSummary
 use dotenvy::dotenv;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use crate::api_models::ApiError; // Import ApiError for potential future parsing
 use std::env;
 use std::error::Error;
 use std::sync::OnceLock; // Use OnceLock for lazy static initialization
@@ -104,10 +104,47 @@ pub async fn whoami() -> Result<(WhoamiResponse, Vec<String>), Box<dyn Error + S
     }
 }
 
-// TODO: Add placeholder functions for other API endpoints as needed.
+
+/// Fetches a list of change sets for a given workspace.
+/// Intention: Calls the `GET /v1/w/{workspace_id}/change-sets` endpoint.
+/// Design: Uses the initialized `reqwest::Client`, constructs the URL with the workspace ID,
+///         sends a GET request, and deserializes the JSON response into `ListChangeSetV1Response`.
+///         Includes logging similar to the `whoami` function.
+/// Returns: A tuple containing the `ListChangeSetV1Response` on success and a `Vec<String>` of log messages.
+pub async fn list_change_sets(workspace_id: &str) -> Result<(ListChangeSetV1Response, Vec<String>), Box<dyn Error + Send + Sync>> {
+    let mut logs = Vec::new();
+    let config = get_api_config()?; // Get or initialize config
+
+    let url = format!("{}/v1/w/{}/change-sets", config.base_url, workspace_id);
+    logs.push(format!("Calling API: GET {}", url));
+
+    let response = config.client.get(&url).send().await?;
+
+    let status = response.status();
+    logs.push(format!("API Response Status: {}", status));
+
+    if status.is_success() {
+        let response_text = response.text().await?;
+        logs.push(format!("API Success Body: {}", response_text));
+        let list_response: ListChangeSetV1Response = serde_json::from_str(&response_text)
+            .map_err(|e| format!("Failed to deserialize list change sets response: {} - Body: {}", e, response_text))?;
+        Ok((list_response, logs))
+    } else {
+        let error_text = response.text().await.unwrap_or_else(|_| "Failed to read error body".to_string());
+        logs.push(format!("API Error Body: {}", error_text));
+        let error_message = match serde_json::from_str::<ApiError>(&error_text) {
+             Ok(api_error) => format!("API request failed with status {}: Code {:?}, Message: {}", status, api_error.code, api_error.message),
+             Err(_) => format!("API request failed with status {}: {}", status, error_text),
+        };
+        Err(error_message.into())
+    }
+}
+
+
+// TODO: Add functions for other API endpoints as needed.
 // Examples:
-// pub async fn list_change_sets(workspace_id: &str) -> Result<ListChangeSetV1Response, Box<dyn Error + Send + Sync>> { ... }
-// pub async fn create_change_set(workspace_id: &str, name: &str) -> Result<CreateChangeSetV1Response, Box<dyn Error + Send + Sync>> { ... }
+// pub async fn create_change_set(workspace_id: &str, name: &str) -> Result<(CreateChangeSetV1Response, Vec<String>), Box<dyn Error + Send + Sync>> { ... }
+// pub async fn get_component(workspace_id: &str, change_set_id: &str, component_id: &str) -> Result<(GetComponentV1Response, Vec<String>), Box<dyn Error + Send + Sync>> { ... }
 
 // Note: The error type `Box<dyn Error + Send + Sync>` is used for flexibility,
 // allowing different error types (IO, HTTP, API errors) to be returned.

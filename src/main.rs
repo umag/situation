@@ -10,27 +10,32 @@ use ratatui::{
     Frame,
     Terminal,
     backend::{Backend, CrosstermBackend},
-    layout::{Alignment, Constraint, Direction, Layout}, // Added Alignment
-    text::Line, // Added Line import for log rendering
-    widgets::{Block, Borders, Paragraph, Wrap}, // Added Wrap
+    layout::{Alignment, Constraint, Direction, Layout},
+    style::{Color, Modifier, Style}, // Added Style, Color, Modifier for highlighting
+    text::Line,
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap}, // Added List, ListItem, ListState
 };
 use tokio;
 
-mod api_client; // Added module
-mod api_models; // Added module
+mod api_client;
+mod api_models;
 
-use api_models::WhoamiResponse; // Use the specific model
+// Import necessary models
+use api_models::{ChangeSetSummary, WhoamiResponse}; // Added ChangeSetSummary
 
-use std::{cmp::min, error::Error, io, time::Duration}; // Added Duration, cmp::min
+use std::{cmp::min, error::Error, io, time::Duration};
 
 // Intention: Hold the application's state.
 // Design Choice: Simple struct holding API data, logs, and scroll state.
-#[derive(Debug, Clone)] // Removed Default derive, will implement new()
+// Intention: Hold the application's state, including TUI interaction state.
+// Design Choice: Added ListState for managing the change set list selection.
+#[derive(Debug, Clone)]
 struct App {
     whoami_data: Option<WhoamiResponse>,
-    logs: Vec<String>, // To store log messages
-    log_scroll: usize, // To track scroll position in the log window
-                       // Add other state fields as needed
+    change_sets: Option<Vec<ChangeSetSummary>>,
+    change_set_list_state: ListState, // Added state for the change set list
+    logs: Vec<String>,
+    log_scroll: usize,
 }
 
 impl App {
@@ -38,6 +43,8 @@ impl App {
     fn new() -> Self {
         Self {
             whoami_data: None,
+            change_sets: None,
+            change_set_list_state: ListState::default(), // Initialize list state
             logs: Vec::new(),
             log_scroll: 0,
         }
@@ -64,6 +71,40 @@ impl App {
         // Calculate max scroll based on number of logs and window height
         let max_scroll = self.logs.len().saturating_sub(view_height);
         self.log_scroll = min(self.log_scroll.saturating_add(1), max_scroll);
+    }
+
+    // Intention: Move selection down in the change set list.
+    fn change_set_next(&mut self) {
+        if let Some(change_sets) = &self.change_sets {
+            let i = match self.change_set_list_state.selected() {
+                Some(i) => {
+                    if i >= change_sets.len() - 1 {
+                        0 // Wrap around
+                    } else {
+                        i + 1
+                    }
+                }
+                None => 0, // Select first if nothing selected
+            };
+            self.change_set_list_state.select(Some(i));
+        }
+    }
+
+    // Intention: Move selection up in the change set list.
+    fn change_set_previous(&mut self) {
+        if let Some(change_sets) = &self.change_sets {
+            let i = match self.change_set_list_state.selected() {
+                Some(i) => {
+                    if i == 0 {
+                        change_sets.len() - 1 // Wrap around
+                    } else {
+                        i - 1
+                    }
+                }
+                None => 0, // Select first if nothing selected
+            };
+            self.change_set_list_state.select(Some(i));
+        }
     }
 }
 
@@ -107,17 +148,45 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     // Intention: Initialize application state using the new constructor.
     let mut app = App::new();
 
-    // Intention: Perform initial data fetch and log the process.
-    // Design Choice: Call whoami once at the start. Handle the new tuple return type and log results/errors.
+    // Intention: Perform initial data fetch (whoami and change sets) and log the process.
+    // Design Choice: Call whoami first, then list_change_sets if whoami succeeds.
     app.add_log("Fetching initial /whoami data...".to_string());
     match api_client::whoami().await {
-        Ok((data, logs)) => {
-            app.whoami_data = Some(data);
-            app.logs.extend(logs); // Add logs from the API call
+        Ok((whoami_data, whoami_logs)) => {
+            let workspace_id = whoami_data.workspace_id.clone(); // Clone workspace_id for the next call
+            app.whoami_data = Some(whoami_data);
+            app.logs.extend(whoami_logs); // Add logs from the whoami call
             app.add_log("/whoami call successful.".to_string());
+
+            // Now fetch change sets using the workspace_id
+            app.add_log(format!(
+                "Fetching change sets for workspace {}...",
+                workspace_id
+            ));
+            match api_client::list_change_sets(&workspace_id).await {
+                Ok((list_response, cs_logs)) => {
+                    // Select the first item if the list is not empty
+                    if !list_response.change_sets.is_empty() {
+                        app.change_set_list_state.select(Some(0));
+                    } else {
+                        app.change_set_list_state.select(None); // Ensure nothing selected if empty
+                    }
+                    app.change_sets = Some(list_response.change_sets);
+                    app.logs.extend(cs_logs);
+                    app.add_log(
+                        "list_change_sets call successful.".to_string(),
+                    );
+                }
+                Err(e) => {
+                    app.change_set_list_state.select(None); // Ensure nothing selected on error
+                    let error_msg =
+                        format!("Error fetching change sets: {}", e);
+                    app.add_log(error_msg);
+                }
+            }
         }
         Err(e) => {
-            // Log the error message into the app's log buffer.
+            // Log the error message for whoami failure into the app's log buffer.
             let error_msg = format!("Error fetching initial data: {}", e);
             app.add_log(error_msg);
             // Optionally, still print to stderr during development if helpful
@@ -138,20 +207,21 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
                 if key.code == KeyCode::Char('q') {
                     return Ok(());
                 }
-                // Intention: Handle log scrolling input.
-                // Design Choice: Use Up/Down arrows or j/k keys. Pass log window height to scroll_down.
-                // Note: log_height is hardcoded here for simplicity, matching the value in ui().
-                // A more robust solution might involve passing layout info around.
+                // Intention: Handle input for list navigation and log scrolling.
+                // Design Choice: Use Up/Down for list nav, j/k for log scroll.
+                // TODO: Add focus switching mechanism later if needed. Assume list is focus for now.
                 let log_height = 10; // Must match the Constraint::Length in ui()
                 match key.code {
-                    KeyCode::Up | KeyCode::Char('k') => app.scroll_logs_up(),
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        app.scroll_logs_down(log_height)
-                    }
+                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Up => app.change_set_previous(), // Navigate list up
+                    KeyCode::Down => app.change_set_next(), // Navigate list down
+                    KeyCode::Char('k') => app.scroll_logs_up(), // Scroll logs up
+                    KeyCode::Char('j') => app.scroll_logs_down(log_height), // Scroll logs down
                     _ => {} // Ignore other keys
                 }
             }
         }
+        // TODO: Add key for selecting a change set (e.g., Enter)
         // Placeholder for periodic data refresh or other async tasks
     }
 }
@@ -191,25 +261,68 @@ fn ui(f: &mut Frame, app: &App) {
     let content_block =
         Block::default().title("Main Content").borders(Borders::ALL);
     let inner_content_area = content_block.inner(content_area);
-    f.render_widget(content_block, content_area);
+    f.render_widget(content_block, content_area); // Render the block frame
 
-    // Intention: Display user info (excluding email) or loading/error in the main content area.
-    // Design Choice: Use a match statement on `app.whoami_data`. Use Wrap for long lines.
-    let main_content_text = match &app.whoami_data {
-        Some(data) => {
-            format!(
-                "User Info:\nUser ID: {}\nWorkspace ID: {}\n\n(Logs below - Use Up/Down or j/k to scroll)",
-                data.user_id, data.workspace_id
-            )
-        }
-        None => {
-            "Loading user info... (or error occurred)\n\n(Logs below - Use Up/Down or j/k to scroll)"
-                .to_string()
-        }
+    // Intention: Divide the main content area for user info and the change set list.
+    // Design Choice: Split horizontally. User info on top, list below.
+    let content_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Fixed height for user info
+            Constraint::Min(0),    // Remaining space for the change set list
+        ])
+        .split(inner_content_area); // Split the area *inside* the content block
+
+    let user_info_area = content_chunks[0];
+    let change_set_list_area = content_chunks[1];
+
+    // Intention: Display user info in the top part of the content area.
+    let user_info_text = match &app.whoami_data {
+        Some(whoami_data) => format!(
+            "User Info:\nUser ID: {}\nWorkspace ID: {}",
+            whoami_data.user_id, whoami_data.workspace_id
+        ),
+        None => "Loading user info...".to_string(),
     };
-    let main_paragraph =
-        Paragraph::new(main_content_text).wrap(Wrap { trim: true });
-    f.render_widget(main_paragraph, inner_content_area);
+    let user_info_paragraph = Paragraph::new(user_info_text);
+    f.render_widget(user_info_paragraph, user_info_area);
+
+    // Intention: Display the change sets in a selectable list.
+    // Design Choice: Use `List` widget, map `ChangeSetSummary` to `ListItem`. Highlight selected.
+    let change_set_items: Vec<ListItem> = match &app.change_sets {
+        Some(change_sets) => change_sets
+            .iter()
+            .map(|cs| {
+                ListItem::new(format!(
+                    "{} ({}) - {}",
+                    cs.name, cs.status, cs.id
+                ))
+            })
+            .collect(),
+        None => vec![ListItem::new("Loading change sets...")], // Show loading state
+    };
+
+    let change_set_list = List::new(change_set_items)
+        .block(
+            Block::default()
+                .title("Change Sets (Use Up/Down)")
+                .borders(Borders::NONE),
+        ) // Title for the list area
+        .highlight_style(
+            Style::default()
+                .bg(Color::LightBlue) // Highlight background
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("> "); // Symbol for selected item
+
+    // Render the list, passing the mutable state
+    // Clone the state because render_stateful_widget requires mutable access
+    let mut list_state = app.change_set_list_state.clone();
+    f.render_stateful_widget(
+        change_set_list,
+        change_set_list_area,
+        &mut list_state,
+    );
 
     // --- Log Window Rendering ---
 

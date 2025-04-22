@@ -1,8 +1,13 @@
 // tests/api_calls.rs
 
 // Intention:
-// This module contains integration tests for the API calls made by the TUI application
-// to the Systeminit/si API via the luminork service.
+// This file serves as the entry point for integration tests.
+// It declares test modules located in subdirectories (like `tests/api/`).
+// Specific tests related to API calls are organized within those submodules.
+
+// Declare the module containing API-specific tests.
+// This corresponds to the `tests/api/` directory and its `mod.rs` file.
+mod api;
 
 // Design Choices:
 // - Uses standard Rust test conventions (`#[cfg(test)]`, `#[test]`).
@@ -37,9 +42,9 @@ mod tests {
         // assert!(response.token.is_some());
     }
 
-    // TODO: Add more tests for other endpoints defined in openapi.json as they are implemented.
-    // Examples:
-    // - test_list_change_sets()
-    // - test_create_change_set()
-    // - test_get_component()
+    // TODO: Add more tests for other general endpoints or functionalities here if needed,
+    //       or create new submodules under `tests/` for better organization.
+    // Examples (moved to specific modules):
+    // - test_create_change_set() // -> tests/api/change_sets.rs
+    // - test_get_component()     // -> tests/api/components.rs (example)
 }

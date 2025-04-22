@@ -130,6 +130,48 @@ pub struct DeleteChangeSetV1Response {
     pub success: bool,
 }
 
+/// Represents component details within a merge status action.
+/// Based on `MergeStatusV1ResponseActionComponent` in openapi.json.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStatusV1ResponseActionComponent {
+    /// The unique identifier for the component.
+    pub id: String,
+    /// The name of the component.
+    pub name: String,
+}
+
+/// Represents a single action within the merge status response.
+/// Based on `MergeStatusV1ResponseAction` in openapi.json.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStatusV1ResponseAction {
+    /// The unique identifier for the action.
+    pub id: String,
+    /// The current state of the action (e.g., "Added", "Modified", "Deleted").
+    pub state: String,
+    /// The kind of action (e.g., "Create", "Update", "Delete").
+    pub kind: String,
+    /// The name associated with the action.
+    pub name: String,
+    /// Optional component details related to the action.
+    pub component: Option<MergeStatusV1ResponseActionComponent>,
+}
+
+/// Represents the response from the `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/merge_status` endpoint.
+/// Based on the schema `MergeStatusV1Response` in openapi.json.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStatusV1Response {
+    /// Contains details of the change set itself. The exact structure is not fully
+    /// specified in the OpenAPI schema (just `{"type": "object"}`), so we use `serde_json::Value`
+    /// to capture whatever object is returned.
+    #[serde(rename = "changeSet")] // Match the exact name from OpenAPI
+    pub change_set: serde_json::Value,
+    /// A list of actions associated with the change set's merge status.
+    pub actions: Vec<MergeStatusV1ResponseAction>,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
 // for other endpoints like Components, etc.
 // Examples:

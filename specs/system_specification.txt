@@ -32,6 +32,7 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `POST /v1/w/{workspace_id}/change-sets` (in `api_client::create_change_set`)
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::get_change_set`)
     - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` (in `api_client::delete_change_set`)
+    - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/merge_status` (in `api_client::get_merge_status`)
 - The main binary is defined in `src/main.rs` and uses the library.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
@@ -63,7 +64,7 @@ This application provides a terminal user interface (TUI) for interacting with t
 ## 8. Testing
 - Integration tests are located in `tests/api/`.
     - Implemented test for `/whoami` exists in `tests/api/whoami.rs` (requires valid `.env`, enabled).
-    - Implemented tests for `GET` (list), `POST` (create), `GET` (specific), and `DELETE` on `/v1/w/{workspace_id}/change-sets` exist in `tests/api/change_sets.rs` (require valid `.env`, enabled).
+    - Implemented tests for `GET` (list), `POST` (create), `GET` (specific), `DELETE`, and `GET` (merge status) on `/v1/w/{workspace_id}/change-sets` exist in `tests/api/change_sets.rs` (require valid `.env`, enabled).
 - Unit tests are located in `tests/unit/`.
     - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
     - Unit tests for `App` state logic were removed due to difficulty testing binary internals from `tests/`.

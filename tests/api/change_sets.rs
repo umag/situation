@@ -175,7 +175,7 @@ mod tests {
             .to_string();
 
         // Add a small delay to see if it helps
-        sleep(std::time::Duration::from_millis(200)).await; // Increased delay slightly
+        sleep(std::time::Duration::from_millis(300)).await; // Increased delay further
 
         // 2. Get the created change set
         // Assume api_client::get_change_set exists
@@ -282,4 +282,94 @@ mod tests {
     }
 
     // TODO: Add tests for other change set operations (apply, etc.)
+
+    /// Test Case: Verify the `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/merge_status` endpoint call.
+    /// Intention: Ensure the application can correctly call the GET endpoint for a change set's merge status
+    ///            and handle a successful response.
+    /// Design: This test first creates a new change set, then uses its ID to make a GET request
+    ///         to retrieve the merge status. It asserts that the response indicates success
+    ///         and contains the expected fields (`changeSet`, `actions`).
+    ///         Requires a running SI instance and valid .env configuration.
+    #[tokio::test]
+    async fn test_get_merge_status_endpoint() {
+        dotenv().ok(); // Load .env file
+        let workspace_id = get_workspace_id()
+            .await
+            .expect("Failed to get workspace_id for test");
+        let change_set_name =
+            format!("test-merge-status-{}", Utc::now().timestamp_millis());
+
+        // 1. Create a change set to get an ID
+        let create_request_body = api_models::CreateChangeSetV1Request {
+            change_set_name: change_set_name.clone(),
+        };
+        let create_result =
+            api_client::create_change_set(&workspace_id, create_request_body)
+                .await;
+        assert!(
+            create_result.is_ok(),
+            "Failed to create change set for merge status test: {:?}",
+            create_result.err()
+        );
+        let (create_response, _logs) = create_result.unwrap();
+        let change_set_id = create_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .expect("Created change set response did not contain an ID")
+            .to_string();
+
+        // Add a small delay
+        sleep(std::time::Duration::from_millis(200)).await; // Increased delay
+
+        // 2. Get the merge status for the created change set
+        // Assume api_client::get_merge_status exists
+        let merge_status_result =
+            api_client::get_merge_status(&workspace_id, &change_set_id).await;
+
+        assert!(
+            merge_status_result.is_ok(),
+            "API call to get merge status should return Ok. Error: {:?}",
+            merge_status_result.err()
+        );
+
+        // Add explicit type annotation
+        let (merge_status_response, _logs): (
+            api_models::MergeStatusV1Response, // Assuming this model exists
+            Vec<String>,
+        ) = merge_status_result.unwrap();
+
+        // Check the structure based on MergeStatusV1Response
+        assert!(
+            !merge_status_response.change_set.is_null(),
+            "Response should contain a changeSet object"
+        );
+        // Note: A newly created change set might have an empty actions array,
+        // so we don't assert !is_empty(). Deserialization success implies the field exists.
+
+        // Optionally, verify the change set ID matches if the response structure allows
+        let fetched_cs_id = merge_status_response
+            .change_set
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let expected_id_str = change_set_id.as_str(); // Borrow explicitly before assertion
+        assert_eq!(
+            fetched_cs_id.as_deref(),
+            Some(expected_id_str), // Use the borrowed slice here
+            "Merge status change set ID should match the created one"
+        );
+
+        // Add delay before cleanup
+        sleep(std::time::Duration::from_millis(100)).await;
+
+        // Clean up: Delete the change set
+        let delete_result =
+            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        assert!(
+            delete_result.is_ok(),
+            "Failed to delete change set after merge status test: {:?}",
+            delete_result.err()
+        );
+    }
 }

@@ -17,16 +17,16 @@ use ratatui::{
 };
 use tokio;
 
-mod api_client;
-mod api_models;
-
-// Import necessary models
-use api_models::{ChangeSetSummary, WhoamiResponse}; // Added ChangeSetSummary
+// Use the library crate 'situation' to access shared modules
+use situation::api_client;
+use situation::api_models::{self, ChangeSetSummary, WhoamiResponse}; // Import models via library
 
 use std::{cmp::min, error::Error, io, time::Duration};
 
 // Intention: Hold the application's state.
 // Design Choice: Simple struct holding API data, logs, and scroll state.
+// Intention: Hold the application's state, including TUI interaction state.
+// Design Choice: Added ListState for managing the change set list selection.
 // Intention: Hold the application's state, including TUI interaction state.
 // Design Choice: Added ListState for managing the change set list selection.
 #[derive(Debug, Clone)]

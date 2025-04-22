@@ -19,13 +19,16 @@ This application provides a terminal user interface (TUI) for interacting with t
 - The OpenAPI schema is defined in `openapi.json`.
 
 ## 4. API Client Implementation
-- API calls are handled by functions in `src/api_client.rs`.
+- Core logic (API client, models) is defined in the library (`src/lib.rs`).
+- `api_client` and `api_models` modules are part of the library.
+- API calls are handled by functions in `src/api_client.rs` (now part of the library).
 - Uses `reqwest` for HTTP communication.
 - Loads configuration lazily using `std::sync::OnceLock`.
-- Data models corresponding to API responses are defined in `src/api_models.rs` using `serde` (includes `WhoamiResponse`, `ApiError`, `ListChangeSetV1Response`, `ChangeSetSummary`).
+- Data models corresponding to API responses are defined in `src/api_models.rs` (now part of the library) using `serde` (includes `WhoamiResponse`, `ApiError`, `ListChangeSetV1Response`, `ChangeSetSummary`).
 - Implements API calls for:
     - `/whoami` (in `api_client::whoami`)
     - `GET /v1/w/{workspace_id}/change-sets` (in `api_client::list_change_sets`)
+- The main binary is defined in `src/main.rs` and uses the library.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
 ## 5. TUI Layout & State
@@ -54,23 +57,28 @@ This application provides a terminal user interface (TUI) for interacting with t
 - TODO: Parse specific API errors (like `ApiError` model) more consistently in the client for better error messages in logs.
 
 ## 8. Testing
-- A basic integration test file exists at `tests/api_calls.rs`.
-- Contains a placeholder test for `/whoami` (needs update to use real client).
-- Standard unit test in `main.rs` exists.
+- Integration tests are located in `tests/api/`.
+    - Implemented test for `/whoami` exists in `tests/api/whoami.rs` (requires valid `.env`, ignored by default).
+    - Placeholder test for `GET /change_set` exists in `tests/api/change_sets.rs`.
+- Unit tests are located in `tests/unit/`.
+    - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
+    - Unit tests for `App` state logic were removed due to difficulty testing binary internals from `tests/`.
+- Test modules (`api`, `unit`) are declared in the main test file `tests/api_calls.rs`.
+- API test modules (`change_sets`, `whoami`) are declared in `tests/api/mod.rs`.
+- Unit test modules (`api_models`) are declared in `tests/unit/mod.rs`.
 
-## 9. Current Status (as of 2025-04-21 - Updated)
-- Project initialized with basic TUI structure (ratatui, crossterm).
+## 9. Current Status (as of 2025-04-22 - Updated)
+- Project refactored into a library (`src/lib.rs`) and a binary (`src/main.rs`).
+- `api_client` and `api_models` moved to the library.
 - Dependencies added (`serde`, `reqwest`, `dotenvy`).
 - `.env` file provides API URL and JWT token.
-- API client module (`src/api_client.rs`) created using `reqwest`.
-- API models module (`src/api_models.rs`) created using `serde`.
-- `/whoami` endpoint is called on startup using credentials from `.env`.
-- TUI displays `/whoami` data (email in top bar, rest in main area).
-- TUI displays API request/response logs in a scrollable window at the bottom.
-- Handles keyboard input: 'q' to quit, Up/Down/j/k to scroll logs.
-- Placeholder test for `/whoami` exists in `tests/api_calls.rs`.
-- Placeholder test for `GET /change_set` exists in `tests/api/change_sets.rs`.
-- Test modules are organized under the `tests/api/` directory.
+- API client uses `reqwest` and lazy static config.
+- `/whoami` and `list_change_sets` endpoints are called on startup.
+- TUI displays `/whoami` data and a selectable list of change sets.
+- TUI displays API logs in a scrollable window.
+- Handles keyboard input: 'q' to quit, Up/Down for list nav, j/k for log scroll.
+- Placeholder integration tests exist for API calls.
+- Unit tests exist for API model deserialization in `tests/unit/api_models.rs`.
 - Specification document updated.
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.

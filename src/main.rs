@@ -19,7 +19,10 @@ use tokio;
 
 // Use the library crate 'situation' to access shared modules
 use situation::api_client;
-use situation::api_models::WhoamiResponse; // Removed unused ChangeSetSummary import
+// Import necessary models from the library crate
+use situation::api_models::{
+    ChangeSet, CreateChangeSetV1Request, MergeStatusV1Response, WhoamiResponse,
+}; // Ensure correct import name: MergeStatusV1Response
 
 use std::{cmp::min, error::Error, io, time::Duration};
 
@@ -27,14 +30,19 @@ use std::{cmp::min, error::Error, io, time::Duration};
 // Design Choice: Simple struct holding API data, logs, and scroll state.
 // Intention: Hold the application's state, including TUI interaction state.
 // Design Choice: Added ListState for managing the change set list selection.
-// Intention: Hold the application's state, including TUI interaction state.
-// Design Choice: Added ListState for managing the change set list selection.
+// Intention: Hold the application's state, including TUI interaction state,
+// selected item details, merge status, and UI flags.
+// Design Choice: Added fields for details, status, action feedback, and pane visibility.
 #[derive(Debug, Clone)]
 struct App {
     whoami_data: Option<WhoamiResponse>,
     // Use fully qualified path for ChangeSetSummary just in case
     change_sets: Option<Vec<situation::api_models::ChangeSetSummary>>,
-    change_set_list_state: ListState, // Added state for the change set list
+    change_set_list_state: ListState, // State for the change set list selection
+    selected_change_set_details: Option<ChangeSet>, // Details of the selected change set
+    selected_change_set_merge_status: Option<MergeStatusV1Response>, // Corrected type AGAIN: Merge status of the selected change set
+    current_action: Option<String>, // Feedback for ongoing actions (e.g., "Deleting...")
+    show_details_pane: bool, // Flag to control visibility of the details pane
     logs: Vec<String>,
     log_scroll: usize,
 }
@@ -46,6 +54,10 @@ impl App {
             whoami_data: None,
             change_sets: None,
             change_set_list_state: ListState::default(), // Initialize list state
+            selected_change_set_details: None,
+            selected_change_set_merge_status: None, // Initialize correctly
+            current_action: None,
+            show_details_pane: false, // Details pane hidden by default
             logs: Vec::new(),
             log_scroll: 0,
         }
@@ -143,8 +155,55 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// Intention: Helper function to refresh the list of change sets.
+// Design Choice: Encapsulates the API call and state update logic.
+async fn refresh_change_sets(app: &mut App) {
+    if let Some(whoami_data) = &app.whoami_data {
+        let workspace_id = whoami_data.workspace_id.clone();
+        app.add_log(format!(
+            "Refreshing change sets for workspace {}...",
+            workspace_id
+        ));
+        match api_client::list_change_sets(&workspace_id).await {
+            Ok((list_response, cs_logs)) => {
+                // Preserve selection if possible, otherwise select first or none
+                let current_selection = app.change_set_list_state.selected();
+                let new_len = list_response.change_sets.len();
+
+                if new_len == 0 {
+                    app.change_set_list_state.select(None);
+                } else if let Some(selected_idx) = current_selection {
+                    // If previous selection index is still valid, keep it
+                    if selected_idx >= new_len {
+                        app.change_set_list_state.select(Some(new_len - 1)); // Select last if out of bounds
+                    } else {
+                        // Keep selection - no need to call select
+                    }
+                } else {
+                    // No previous selection or list was empty, select first
+                    app.change_set_list_state.select(Some(0));
+                }
+
+                app.change_sets = Some(list_response.change_sets);
+                app.logs.extend(cs_logs);
+                app.add_log("Change set list refreshed.".to_string());
+            }
+            Err(e) => {
+                app.change_set_list_state.select(None); // Ensure nothing selected on error
+                let error_msg = format!("Error refreshing change sets: {}", e);
+                app.add_log(error_msg);
+            }
+        }
+    } else {
+        app.add_log(
+            "Cannot refresh change sets: Whoami data not available."
+                .to_string(),
+        );
+    }
+}
+
 // Intention: Main application loop for handling events and rendering the UI.
-// Design Choice: A loop that initializes state, fetches data, draws UI, and handles input.
+// Design Choice: A loop that initializes state, fetches data, draws UI, and handles input asynchronously.
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     // Intention: Initialize application state using the new constructor.
     let mut app = App::new();
@@ -158,33 +217,8 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
             app.whoami_data = Some(whoami_data);
             app.logs.extend(whoami_logs); // Add logs from the whoami call
             app.add_log("/whoami call successful.".to_string());
-
-            // Now fetch change sets using the workspace_id
-            app.add_log(format!(
-                "Fetching change sets for workspace {}...",
-                workspace_id
-            ));
-            match api_client::list_change_sets(&workspace_id).await {
-                Ok((list_response, cs_logs)) => {
-                    // Select the first item if the list is not empty
-                    if !list_response.change_sets.is_empty() {
-                        app.change_set_list_state.select(Some(0));
-                    } else {
-                        app.change_set_list_state.select(None); // Ensure nothing selected if empty
-                    }
-                    app.change_sets = Some(list_response.change_sets);
-                    app.logs.extend(cs_logs);
-                    app.add_log(
-                        "list_change_sets call successful.".to_string(),
-                    );
-                }
-                Err(e) => {
-                    app.change_set_list_state.select(None); // Ensure nothing selected on error
-                    let error_msg =
-                        format!("Error fetching change sets: {}", e);
-                    app.add_log(error_msg);
-                }
-            }
+            // Initial fetch of change sets
+            refresh_change_sets(&mut app).await;
         }
         Err(e) => {
             // Log the error message for whoami failure into the app's log buffer.
@@ -199,37 +233,234 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
         // Intention: Draw the current state of the UI using app state.
         terminal.draw(|f| ui(f, &app))?; // Pass app state to ui
 
-        // Intention: Handle user input events.
-        // Design Choice: Poll for events with a timeout.
-        if event::poll(Duration::from_millis(250))? {
-            // Use Duration directly
+        // Intention: Handle user input events asynchronously.
+        // Design Choice: Poll for events with a timeout, handle keys, await API calls directly.
+        if event::poll(Duration::from_millis(100))? {
+            // Poll more frequently for responsiveness
             if let Event::Key(key) = event::read()? {
-                // Intention: Exit the application when 'q' is pressed.
-                if key.code == KeyCode::Char('q') {
-                    return Ok(());
-                }
-                // Intention: Handle input for list navigation and log scrolling.
-                // Design Choice: Use Up/Down for list nav, j/k for log scroll.
-                // TODO: Add focus switching mechanism later if needed. Assume list is focus for now.
+                // Clone necessary data before potential async operations that borrow `app` mutably.
+                let selected_index = app.change_set_list_state.selected();
+                let workspace_id =
+                    app.whoami_data.as_ref().map(|d| d.workspace_id.clone());
+                let selected_cs_id = selected_index.and_then(|idx| {
+                    app.change_sets
+                        .as_ref()
+                        .and_then(|css| css.get(idx))
+                        .map(|cs| cs.id.clone())
+                });
+
                 let log_height = 10; // Must match the Constraint::Length in ui()
+
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Up => app.change_set_previous(), // Navigate list up
-                    KeyCode::Down => app.change_set_next(), // Navigate list down
-                    KeyCode::Char('k') => app.scroll_logs_up(), // Scroll logs up
-                    KeyCode::Char('j') => app.scroll_logs_down(log_height), // Scroll logs down
+                    KeyCode::Up => app.change_set_previous(),
+                    KeyCode::Down => app.change_set_next(),
+                    KeyCode::Char('k') => app.scroll_logs_up(),
+                    KeyCode::Char('j') => app.scroll_logs_down(log_height),
+
+                    // --- Change Set Actions ---
+                    KeyCode::Enter => {
+                        app.show_details_pane = !app.show_details_pane;
+                        if app.show_details_pane {
+                            if let (Some(ws_id), Some(cs_id)) =
+                                (workspace_id, selected_cs_id)
+                            {
+                                app.current_action =
+                                    Some("Fetching details...".to_string());
+                                terminal.draw(|f| ui(f, &app))?; // Redraw to show action message
+
+                                // Fetch details
+                                match api_client::get_change_set(&ws_id, &cs_id)
+                                    .await
+                                {
+                                    // Extract the inner change_set from the response
+                                    Ok((get_response, logs)) => {
+                                        app.selected_change_set_details =
+                                            Some(get_response.change_set); // Access inner field
+                                        app.logs.extend(logs);
+                                        app.add_log(format!(
+                                            "Details fetched for {}",
+                                            cs_id
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        app.selected_change_set_details = None; // Clear on error
+                                        app.add_log(format!(
+                                            "Error fetching details for {}: {}",
+                                            cs_id, e
+                                        ));
+                                    }
+                                }
+                                // Fetch merge status (using correct type MergeStatusV1Response)
+                                match api_client::get_merge_status(
+                                    &ws_id, &cs_id,
+                                )
+                                .await
+                                {
+                                    Ok((status_response, logs)) => {
+                                        app.selected_change_set_merge_status =
+                                            Some(status_response); // Store the full response
+                                        app.logs.extend(logs);
+                                        app.add_log(format!(
+                                            "Merge status fetched for {}",
+                                            cs_id
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        app.selected_change_set_merge_status =
+                                            None; // Clear on error
+                                        app.add_log(format!("Error fetching merge status for {}: {}", cs_id, e));
+                                    }
+                                }
+                                app.current_action = None; // Clear action message
+                            } else {
+                                app.add_log("Cannot fetch details: No workspace or changeset selected.".to_string());
+                                app.show_details_pane = false; // Don't show pane if we can't fetch
+                            }
+                        } else {
+                            // Clear details when hiding pane
+                            app.selected_change_set_details = None;
+                            app.selected_change_set_merge_status = None;
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        // Delete Change Set
+                        if let (Some(ws_id), Some(cs_id)) =
+                            (workspace_id, selected_cs_id)
+                        {
+                            app.current_action =
+                                Some(format!("Deleting {}...", cs_id));
+                            terminal.draw(|f| ui(f, &app))?; // Redraw
+
+                            match api_client::delete_change_set(&ws_id, &cs_id)
+                                .await
+                            {
+                                // Ensure matching the response tuple (DeleteChangeSetV1Response, Vec<String>)
+                                Ok((_delete_response, logs)) => {
+                                    app.logs.extend(logs);
+                                    app.add_log(format!(
+                                        "Deleted changeset {}",
+                                        cs_id
+                                    ));
+                                    // Clear details if they were for the deleted item
+                                    if app
+                                        .selected_change_set_details
+                                        .as_ref()
+                                        .map(|d| &d.id)
+                                        == Some(&cs_id)
+                                    {
+                                        app.selected_change_set_details = None;
+                                        app.selected_change_set_merge_status =
+                                            None;
+                                        app.show_details_pane = false;
+                                    }
+                                }
+                                Err(e) => {
+                                    app.add_log(format!(
+                                        "Error deleting changeset {}: {}",
+                                        cs_id, e
+                                    ));
+                                }
+                            }
+                            app.current_action = None;
+                            refresh_change_sets(&mut app).await; // Refresh list
+                        } else {
+                            app.add_log("Cannot delete: No workspace or changeset selected.".to_string());
+                        }
+                    }
+                    KeyCode::Char('c') => {
+                        // Create Change Set
+                        if let Some(ws_id) = workspace_id {
+                            let new_cs_name = "New Changeset"; // TODO: Prompt user for name later
+                            app.current_action =
+                                Some(format!("Creating '{}'...", new_cs_name));
+                            terminal.draw(|f| ui(f, &app))?; // Redraw
+
+                            // Construct the request object
+                            let request = CreateChangeSetV1Request {
+                                change_set_name: new_cs_name.to_string(),
+                            };
+
+                            match api_client::create_change_set(&ws_id, request) // Pass the request struct
+                                .await
+                            {
+                                // Access fields via created_cs.change_set
+                                Ok((created_cs_response, logs)) => {
+                                    app.logs.extend(logs);
+                                    app.add_log(format!(
+                                        "Created changeset '{}' ({})",
+                                        created_cs_response.change_set.name, // Access nested field
+                                        created_cs_response.change_set.id // Access nested field
+                                    ));
+                                }
+                                Err(e) => {
+                                    app.add_log(format!(
+                                        "Error creating changeset: {}",
+                                        e
+                                    ));
+                                }
+                            }
+                            app.current_action = None;
+                            refresh_change_sets(&mut app).await; // Refresh list
+                        } else {
+                            app.add_log(
+                                "Cannot create: No workspace available."
+                                    .to_string(),
+                            );
+                        }
+                    }
+                    KeyCode::Char('f') => {
+                        // Force Apply Change Set
+                        if let (Some(ws_id), Some(cs_id)) =
+                            (workspace_id, selected_cs_id)
+                        {
+                            app.current_action =
+                                Some(format!("Applying {}...", cs_id));
+                            terminal.draw(|f| ui(f, &app))?; // Redraw
+
+                            match api_client::force_apply_change_set(
+                                &ws_id, &cs_id,
+                            )
+                            .await
+                            {
+                                Ok((apply_response, logs)) => {
+                                    // Assuming apply returns some response struct
+                                    app.logs.extend(logs);
+                                    // TODO: Inspect apply_response if needed
+                                    app.add_log(format!(
+                                        "Apply initiated for changeset {}",
+                                        cs_id
+                                    ));
+                                    // Note: Apply might take time, status might change later. Refresh shows current state.
+                                }
+                                Err(e) => {
+                                    app.add_log(format!(
+                                        "Error applying changeset {}: {}",
+                                        cs_id, e
+                                    ));
+                                }
+                            }
+                            app.current_action = None;
+                            refresh_change_sets(&mut app).await; // Refresh list to see status update
+                        } else {
+                            app.add_log("Cannot apply: No workspace or changeset selected.".to_string());
+                        }
+                    }
+
                     _ => {} // Ignore other keys
                 }
             }
         }
-        // TODO: Add key for selecting a change set (e.g., Enter)
-        // Placeholder for periodic data refresh or other async tasks
+        // Placeholder for other async tasks or periodic refresh if needed later
+        // tokio::time::sleep(Duration::from_millis(50)).await; // Small sleep to prevent busy-looping if no events
     }
+    // Note: Loop is infinite, exit happens via `return Ok(())` on 'q' press.
 }
 
-// Intention: Define the UI layout and render widgets based on application state.
-// Design Choice: A layout displaying whoami data, logs, and handling scrolling.
+use ratatui::text::Line; // Import Line for constructing text
 
+// Intention: Define the UI layout and render widgets based on application state.
+// Design Choice: A layout displaying whoami data, logs, list, and optional details pane.
 fn ui(f: &mut Frame, app: &App) {
     // Intention: Create the main layout with a top bar, main content, and a bottom log area.
     // Design Choice: Vertical layout splitting screen: top bar (1), main content (flexible), logs (fixed height).
@@ -237,7 +468,7 @@ fn ui(f: &mut Frame, app: &App) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),          // Top bar for email
+            Constraint::Length(1),          // Top bar for email/status
             Constraint::Min(0),             // Main content area (flexible)
             Constraint::Length(log_height), // Log window area
         ])
@@ -253,29 +484,69 @@ fn ui(f: &mut Frame, app: &App) {
         Some(data) => data.user_email.clone(),
         None => "".to_string(), // Show nothing if data isn't loaded yet
     };
+    // Intention: Display user email and current action status in the top bar.
+    // Design Choice: Split top bar horizontally. Email on right, status on left.
+    let top_bar_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(70), // Space for status/action message
+            Constraint::Percentage(30), // Space for email
+        ])
+        .split(top_bar_area);
+
+    let status_area = top_bar_chunks[0];
+    let email_area = top_bar_chunks[1];
+
     let email_paragraph =
         Paragraph::new(email_text).alignment(Alignment::Right);
-    f.render_widget(email_paragraph, top_bar_area);
+    f.render_widget(email_paragraph, email_area);
+
+    // Display current action if any
+    if let Some(action) = &app.current_action {
+        let action_paragraph = Paragraph::new(action.as_str())
+            .style(Style::default().fg(Color::Yellow)); // Highlight action
+        f.render_widget(action_paragraph, status_area);
+    }
 
     // Intention: Create a block for the main content area below the top bar.
-    // Design Choice: Add borders to visually separate it. Title indicates main content.
+    // Design Choice: Add borders. Title indicates main content.
     let content_block =
         Block::default().title("Main Content").borders(Borders::ALL);
     let inner_content_area = content_block.inner(content_area);
     f.render_widget(content_block, content_area); // Render the block frame
 
-    // Intention: Divide the main content area for user info and the change set list.
-    // Design Choice: Split horizontally. User info on top, list below.
-    let content_chunks = Layout::default()
+    // Intention: Divide the main content area based on whether the details pane is shown.
+    // Design Choice: If details shown, split horizontally (list | details). Otherwise, list takes full width.
+    let content_chunks = if app.show_details_pane {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50), // List area
+                Constraint::Percentage(50), // Details area
+            ])
+            .split(inner_content_area) // Split the area *inside* the content block
+    } else {
+        // Only the list area is needed
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(100)])
+            .split(inner_content_area)
+    };
+
+    let list_and_info_area = content_chunks[0]; // Always exists
+
+    // Intention: Divide the list area vertically for user info and the change set list.
+    // Design Choice: Split vertically. User info on top, list below.
+    let list_info_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Fixed height for user info
             Constraint::Min(0),    // Remaining space for the change set list
         ])
-        .split(inner_content_area); // Split the area *inside* the content block
+        .split(list_and_info_area); // Split the left/main pane
 
-    let user_info_area = content_chunks[0];
-    let change_set_list_area = content_chunks[1];
+    let user_info_area = list_info_chunks[0];
+    let change_set_list_area = list_info_chunks[1];
 
     // Intention: Display user info in the top part of the content area.
     let user_info_text = match &app.whoami_data {
@@ -289,7 +560,7 @@ fn ui(f: &mut Frame, app: &App) {
     f.render_widget(user_info_paragraph, user_info_area);
 
     // Intention: Display the change sets in a selectable list.
-    // Design Choice: Use `List` widget, map `ChangeSetSummary` to `ListItem`. Highlight selected.
+    // Design Choice: Use `List` widget, map `ChangeSetSummary` to `ListItem`. Highlight selected. Add key hints.
     let change_set_items: Vec<ListItem> = match &app.change_sets {
         Some(change_sets) => change_sets
             .iter()
@@ -303,12 +574,13 @@ fn ui(f: &mut Frame, app: &App) {
         None => vec![ListItem::new("Loading change sets...")], // Show loading state
     };
 
+    let list_title = if app.show_details_pane {
+        "Change Sets (Up/Down, Enter: Close Details, d: Del, f: Apply)"
+    } else {
+        "Change Sets (Up/Down, Enter: Show Details, c: Create)"
+    };
     let change_set_list = List::new(change_set_items)
-        .block(
-            Block::default()
-                .title("Change Sets (Use Up/Down)")
-                .borders(Borders::NONE),
-        ) // Title for the list area
+        .block(Block::default().title(list_title).borders(Borders::NONE)) // Title for the list area
         .highlight_style(
             Style::default()
                 .bg(Color::LightBlue) // Highlight background
@@ -325,11 +597,62 @@ fn ui(f: &mut Frame, app: &App) {
         &mut list_state,
     );
 
+    // --- Details Pane Rendering (Conditional) ---
+    if app.show_details_pane && content_chunks.len() > 1 {
+        let details_area = content_chunks[1];
+        let details_block = Block::default()
+            .title("Details (Enter: Close)")
+            .borders(Borders::ALL);
+        let inner_details_area = details_block.inner(details_area);
+        f.render_widget(details_block, details_area);
+
+        let mut details_text = Vec::new();
+
+        // Display Change Set Details
+        if let Some(details) = &app.selected_change_set_details {
+            details_text.push(Line::from(format!("ID: {}", details.id)));
+            details_text.push(Line::from(format!("Name: {}", details.name)));
+            details_text
+                .push(Line::from(format!("Status: {}", details.status)));
+            // TODO: Add more fields from ChangeSet if they exist
+            details_text.push(Line::from("---")); // Separator
+        } else {
+            details_text.push(Line::from("Loading details..."));
+        }
+
+        // Display Merge Status
+        if let Some(status) = &app.selected_change_set_merge_status {
+            details_text.push(Line::from("Merge Status:"));
+            if status.actions.is_empty() {
+                details_text.push(Line::from("  No actions required."));
+            } else {
+                for action in &status.actions {
+                    let component_info = action
+                        .component
+                        .as_ref()
+                        .map_or_else(String::new, |c| format!(" ({})", c.name));
+                    details_text.push(Line::from(format!(
+                        "  - {} {} {}",
+                        action.kind, action.name, component_info
+                    )));
+                }
+            }
+        } else {
+            details_text.push(Line::from("Loading merge status..."));
+        }
+
+        let details_paragraph =
+            Paragraph::new(details_text).wrap(Wrap { trim: false });
+        f.render_widget(details_paragraph, inner_details_area);
+    }
+
     // --- Log Window Rendering ---
 
     // Intention: Create a block for the log window.
-    // Design Choice: Add borders and a title.
-    let log_block = Block::default().title("Logs").borders(Borders::ALL);
+    // Design Choice: Add borders and a title with scroll hints.
+    let log_block = Block::default()
+        .title("Logs (j/k: Scroll)")
+        .borders(Borders::ALL);
     let inner_log_area = log_block.inner(log_area); // Area inside the log block borders
     f.render_widget(log_block, log_area); // Render the block itself
 

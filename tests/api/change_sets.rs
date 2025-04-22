@@ -115,26 +115,16 @@ mod tests {
             Vec<String>,
         ) = result.unwrap();
 
-        // Check the structure based on CreateChangeSetV1Response
-        // The response schema just has `{"changeSet":{}}`, which isn't very specific in the openapi doc.
-        // We'll assume it returns *some* object under `changeSet`.
-        // A better test would assert specific fields if the actual response is known.
+        // Check the structure based on CreateChangeSetV1Response using the ChangeSet struct
+        // Assert that the ID field is not empty (basic validation)
         assert!(
-            !create_response.change_set.is_null(), // Access the field on the correct struct
-            "Response should contain a changeSet object"
+            !create_response.change_set.id.is_empty(),
+            "Created change set ID should not be empty"
         );
-        // Ideally, we'd get the ID back and maybe verify the name, but the schema is vague.
-        // We might need to list change sets again to confirm creation if the response isn't detailed.
-        // Let's assume the response structure is {"changeSet": {"id": "..."}} for now.
-        let created_id = create_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        assert!(
-            created_id.is_some(),
-            "Response should contain a changeSet object with an id"
+        // Assert that the name matches (if needed, though we provided it)
+        assert_eq!(
+            create_response.change_set.name, change_set_name,
+            "Created change set name should match the request"
         );
     }
 
@@ -167,12 +157,12 @@ mod tests {
             create_result.err()
         );
         let (create_response, _logs) = create_result.unwrap();
-        let change_set_id = create_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .expect("Created change set response did not contain an ID")
-            .to_string();
+        // Access the ID directly from the ChangeSet struct
+        let change_set_id = create_response.change_set.id.clone();
+        assert!(
+            !change_set_id.is_empty(),
+            "Created change set ID should not be empty"
+        );
 
         // Add a small delay to see if it helps
         sleep(std::time::Duration::from_millis(300)).await; // Increased delay further
@@ -194,21 +184,17 @@ mod tests {
             Vec<String>,
         ) = get_result.unwrap();
 
-        // Check the structure based on GetChangeSetV1Response
-        assert!(
-            !get_response.change_set.is_null(),
-            "Response should contain a changeSet object"
-        );
-        // Optionally, verify the ID matches if the response structure allows
-        let fetched_id = get_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        // Check the structure based on GetChangeSetV1Response using the ChangeSet struct
+        // The type system ensures change_set exists if deserialization succeeded.
+        // Verify the ID matches the created one.
         assert_eq!(
-            fetched_id,
-            Some(change_set_id),
+            get_response.change_set.id, change_set_id,
             "Fetched change set ID should match the created one"
+        );
+        // Optionally verify other fields like name
+        assert_eq!(
+            get_response.change_set.name, change_set_name,
+            "Fetched change set name should match"
         );
     }
 
@@ -240,12 +226,12 @@ mod tests {
             create_result.err()
         );
         let (create_response, _logs) = create_result.unwrap();
-        let change_set_id = create_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .expect("Created change set response did not contain an ID")
-            .to_string();
+        // Access the ID directly from the ChangeSet struct
+        let change_set_id = create_response.change_set.id.clone();
+        assert!(
+            !change_set_id.is_empty(),
+            "Created change set ID should not be empty"
+        );
 
         // Add a small delay to allow the system to process the creation if needed
         sleep(std::time::Duration::from_millis(100)).await;
@@ -312,12 +298,12 @@ mod tests {
             create_result.err()
         );
         let (create_response, _logs) = create_result.unwrap();
-        let change_set_id = create_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .expect("Created change set response did not contain an ID")
-            .to_string();
+        // Access the ID directly from the ChangeSet struct
+        let change_set_id = create_response.change_set.id.clone();
+        assert!(
+            !change_set_id.is_empty(),
+            "Created change set ID should not be empty"
+        );
 
         // Add a small delay
         sleep(std::time::Duration::from_millis(200)).await; // Increased delay
@@ -339,25 +325,22 @@ mod tests {
             Vec<String>,
         ) = merge_status_result.unwrap();
 
-        // Check the structure based on MergeStatusV1Response
-        assert!(
-            !merge_status_response.change_set.is_null(),
-            "Response should contain a changeSet object"
+        // Check the structure based on MergeStatusV1Response using the ChangeSet struct
+        // The type system ensures change_set exists if deserialization succeeded.
+        // Verify the ID matches the created one.
+        assert_eq!(
+            merge_status_response.change_set.id, change_set_id,
+            "Merge status change set ID should match the created one"
         );
         // Note: A newly created change set might have an empty actions array,
         // so we don't assert !is_empty(). Deserialization success implies the field exists.
+        // We can assert that the actions field itself exists (is not None, which it can't be here).
+        // The `actions` field is Vec<...>, so it exists, just might be empty.
 
-        // Optionally, verify the change set ID matches if the response structure allows
-        let fetched_cs_id = merge_status_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let expected_id_str = change_set_id.as_str(); // Borrow explicitly before assertion
+        // Optionally verify other fields like name
         assert_eq!(
-            fetched_cs_id.as_deref(),
-            Some(expected_id_str), // Use the borrowed slice here
-            "Merge status change set ID should match the created one"
+            merge_status_response.change_set.name, change_set_name,
+            "Merge status change set name should match"
         );
 
         // Add delay before cleanup - Increased delay to see if it resolves runtime/client issue
@@ -401,12 +384,12 @@ mod tests {
             create_result.err()
         );
         let (create_response, _logs) = create_result.unwrap();
-        let change_set_id = create_response
-            .change_set
-            .get("id")
-            .and_then(|v| v.as_str())
-            .expect("Created change set response did not contain an ID")
-            .to_string();
+        // Access the ID directly from the ChangeSet struct
+        let change_set_id = create_response.change_set.id.clone();
+        assert!(
+            !change_set_id.is_empty(),
+            "Created change set ID should not be empty"
+        );
 
         // Add a small delay
         sleep(std::time::Duration::from_millis(200)).await;

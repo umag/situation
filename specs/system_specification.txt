@@ -24,9 +24,16 @@ This application provides a terminal user interface (TUI) for interacting with t
 - API calls are handled by functions in `src/api_client.rs` (now part of the library).
 - Uses `reqwest` for HTTP communication.
 - Loads configuration lazily using `std::sync::OnceLock`.
-- Data models corresponding to API responses are defined in `src/api_models.rs` (now part of the library) using `serde` (includes `WhoamiResponse`, `ApiError`, `ListChangeSetV1Response`, `ChangeSetSummary`).
+- Data models corresponding to API responses are defined in `src/api_models.rs` (now part of the library) using `serde`. Key models include:
+    - `WhoamiResponse`, `TokenDetails`
+    - `ApiError`
+    - `ChangeSetSummary`, `ChangeSet` (new detailed struct)
+    - `ListChangeSetV1Response`
+    - `CreateChangeSetV1Request`, `CreateChangeSetV1Response`
+    - `GetChangeSetV1Response`
+    - `DeleteChangeSetV1Response`
+    - `MergeStatusV1Response`, `MergeStatusV1ResponseAction`, `MergeStatusV1ResponseActionComponent`
 - Implements API calls for:
-    - `/whoami` (in `api_client::whoami`)
     - `/whoami` (in `api_client::whoami`)
     - `GET /v1/w/{workspace_id}/change-sets` (in `api_client::list_change_sets`)
     - `POST /v1/w/{workspace_id}/change-sets` (in `api_client::create_change_set`)
@@ -39,52 +46,71 @@ This application provides a terminal user interface (TUI) for interacting with t
 
 ## 5. TUI Layout & State
 - The TUI displays data retrieved from the API.
-- Application state is managed in the `App` struct in `src/main.rs` (includes `whoami_data`, `change_sets`, `change_set_list_state`, `logs`, `log_scroll`).
-- Displays the user's email (from `/whoami`) in a top bar (1 line high).
-- The main content area is split vertically:
-    - Top part displays `/whoami` data (User ID, Workspace ID).
-    - Bottom part displays a selectable list of change sets (Name, Status, ID) using `ratatui::widgets::List`. The selected item is highlighted.
-- Displays a scrollable log window at the bottom (10 lines high), including logs from API calls.
+- Application state is managed in the `App` struct in `src/main.rs`. Includes:
+    - `whoami_data`: Data from `/whoami`.
+    - `change_sets`: List of `ChangeSetSummary`.
+    - `change_set_list_state`: `ListState` for the change set list.
+    - `selected_change_set_details`: `Option<ChangeSet>` for the selected item's details.
+    - `selected_change_set_merge_status`: `Option<MergeStatusV1Response>` for the selected item's merge status.
+    - `current_action`: `Option<String>` to display feedback during API calls.
+    - `show_details_pane`: `bool` to control visibility of the details pane.
+    - `logs`: `Vec<String>` for logging messages.
+    - `log_scroll`: `usize` for scrolling the log view.
+- Layout:
+    - Top bar (1 line): Displays current action status (left) and user email (right).
+    - Main content area (flexible):
+        - If `show_details_pane` is false: Displays user info (top) and the selectable change set list (bottom).
+        - If `show_details_pane` is true: Splits horizontally into two panes:
+            - Left Pane: User info (top) and change set list (bottom).
+            - Right Pane (Details Pane): Displays details (`selected_change_set_details`) and merge status (`selected_change_set_merge_status`) for the selected change set.
+    - Log window (10 lines, bottom): Displays scrollable logs (`logs`).
 
 ## 6. Event Handling
-- Handles basic keyboard input:
-    - 'q' to quit.
-    - Up Arrow: Select previous item in the change set list (wraps around).
-    - Down Arrow: Select next item in the change set list (wraps around).
+- Main event loop in `run_app` is asynchronous (`async fn`).
+- Handles keyboard input:
+    - 'q': Quit the application.
+    - Up Arrow: Select previous item in the change set list (wraps).
+    - Down Arrow: Select next item in the change set list (wraps).
     - 'k': Scroll the log window up.
     - 'j': Scroll the log window down.
-    - TODO: Add key for selecting/acting on a change set (e.g., Enter).
+    - Enter: Toggle the visibility of the details pane (`show_details_pane`). When opening, fetches details using `get_change_set` and `get_merge_status` API calls.
+    - 'c': Create a new change set using `create_change_set` API call (currently uses a hardcoded name "New Changeset"). Refreshes the list.
+    - 'd': Delete the selected change set using `delete_change_set` API call. Refreshes the list.
+    - 'f': Force apply the selected change set using `force_apply_change_set` API call. Refreshes the list.
+- Uses a helper function `refresh_change_sets` to reload the change set list after create, delete, or apply actions.
 
 ## 7. Error Handling
 - Basic terminal setup/teardown error handling is in place.
-- API client functions return `Result` to propagate errors (env loading, network, deserialization). The `whoami` function now returns logs on success.
-- Errors during initial API call in `run_app` are now logged to the TUI's log window.
-- API request/response details (status, body) are logged to the TUI's log window.
+- API client functions return `Result<(ResponseType, Vec<String>), Box<dyn Error>>` to propagate errors and logs.
+- Errors during API calls in `run_app` are logged to the TUI's log window.
+- The `current_action` state provides user feedback during potentially long-running API calls.
 - TODO: Parse specific API errors (like `ApiError` model) more consistently in the client for better error messages in logs.
 
 ## 8. Testing
-- Integration tests are located in `tests/api/`.
-    - Implemented test for `/whoami` exists in `tests/api/whoami.rs` (requires valid `.env`, enabled).
-    - Implemented tests for `GET` (list), `POST` (create), `GET` (specific), `DELETE`, and `GET` (merge status) on `/v1/w/{workspace_id}/change-sets` exist in `tests/api/change_sets.rs` (require valid `.env`, enabled).
+- Integration tests for API client functions are located in `tests/api/`.
+    - Tests cover `/whoami` and change set operations (`list`, `create`, `get`, `delete`, `merge_status`).
 - Unit tests are located in `tests/unit/`.
     - Unit tests for API model deserialization exist in `tests/unit/api_models.rs`.
-    - Unit tests for `App` state logic were removed due to difficulty testing binary internals from `tests/`.
+    - Unit tests for `App` state logic were removed due to difficulty testing binary internals.
 - Test modules (`api`, `unit`) are declared in the main test file `tests/api_calls.rs`.
 - API test modules (`change_sets`, `whoami`) are declared in `tests/api/mod.rs`.
 - Unit test modules (`api_models`) are declared in `tests/unit/mod.rs`.
+- **TODO:** Add tests for TUI interactions and state management.
 
-## 9. Current Status (as of 2025-04-22 - Updated)
+## 9. Current Status (as of 2025-04-22 - TUI Update)
 - Project refactored into a library (`src/lib.rs`) and a binary (`src/main.rs`).
-- `api_client` and `api_models` moved to the library.
-- Dependencies added (`serde`, `reqwest`, `dotenvy`).
-- `.env` file provides API URL and JWT token.
-- API client uses `reqwest` and lazy static config.
-- `/whoami` and `list_change_sets` endpoints are called on startup.
-- TUI displays `/whoami` data and a selectable list of change sets.
-- TUI displays API logs in a scrollable window.
-- Handles keyboard input: 'q' to quit, Up/Down for list nav, j/k for log scroll.
-- Placeholder integration tests exist for API calls.
-- Unit tests exist for API model deserialization in `tests/unit/api_models.rs`.
-- Specification document updated.
+- API client and models are in the library.
+- API client uses `reqwest` and lazy static config from `.env`.
+- All specified changeset API endpoints are implemented in the client.
+- TUI (`main.rs`) implemented:
+    - Fetches and displays `/whoami` data and a list of change sets on startup.
+    - Provides a selectable list of change sets.
+    - Allows toggling a details pane (Enter) showing selected change set info and merge status.
+    - Supports creating ('c'), deleting ('d'), and applying ('f') change sets via keybindings.
+    - Displays API logs and action status messages.
+    - Handles basic navigation (Up/Down) and log scrolling (j/k).
+    - Allows quitting ('q').
+- Integration tests exist for API client functions.
+- Unit tests exist for API model deserialization.
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.

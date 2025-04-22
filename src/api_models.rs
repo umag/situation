@@ -77,6 +77,21 @@ pub struct ChangeSetSummary {
     // Note: Add other fields if the actual API response includes more than the example.
 }
 
+/// Represents the detailed structure of a change set.
+/// Based on ChangeSetSummary and common fields expected in detailed views.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeSet {
+    /// The unique identifier for the change set.
+    pub id: String,
+    /// The user-provided name for the change set.
+    pub name: String,
+    /// The current status of the change set (e.g., "Draft", "Applied").
+    pub status: String,
+    // TODO: Add more fields here if the API provides them in detailed responses
+    // (e.g., description, created_at, updated_at).
+}
+
 /// Represents the response from the `GET /v1/w/{workspace_id}/change-sets` endpoint.
 /// Contains a list of change set summaries.
 /// Based on the schema `ListChangeSetV1Response` in openapi.json.
@@ -101,11 +116,9 @@ pub struct CreateChangeSetV1Request {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateChangeSetV1Response {
-    /// Contains details of the created change set. The exact structure is not fully
-    /// specified in the OpenAPI schema (just `{"type": "object"}`), so we use `serde_json::Value`
-    /// to capture whatever object is returned.
+    /// Contains details of the created change set.
     #[serde(rename = "changeSet")] // Match the exact name from OpenAPI
-    pub change_set: serde_json::Value,
+    pub change_set: ChangeSet, // Use the defined ChangeSet struct
 }
 
 /// Represents the response from the `GET /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint.
@@ -113,11 +126,9 @@ pub struct CreateChangeSetV1Response {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GetChangeSetV1Response {
-    /// Contains details of the specific change set. The exact structure is not fully
-    /// specified in the OpenAPI schema (just `{"type": "object"}`), so we use `serde_json::Value`
-    /// to capture whatever object is returned.
+    /// Contains details of the specific change set.
     #[serde(rename = "changeSet")] // Match the exact name from OpenAPI
-    pub change_set: serde_json::Value,
+    pub change_set: ChangeSet, // Use the defined ChangeSet struct
 }
 
 /// Response for DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}
@@ -163,11 +174,9 @@ pub struct MergeStatusV1ResponseAction {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MergeStatusV1Response {
-    /// Contains details of the change set itself. The exact structure is not fully
-    /// specified in the OpenAPI schema (just `{"type": "object"}`), so we use `serde_json::Value`
-    /// to capture whatever object is returned.
+    /// Contains details of the change set itself.
     #[serde(rename = "changeSet")] // Match the exact name from OpenAPI
-    pub change_set: serde_json::Value,
+    pub change_set: ChangeSet, // Use the defined ChangeSet struct
     /// A list of actions associated with the change set's merge status.
     pub actions: Vec<MergeStatusV1ResponseAction>,
 }

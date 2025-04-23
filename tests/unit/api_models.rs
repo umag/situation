@@ -11,7 +11,10 @@
 
 // Use `situation::` to reference items from the library crate.
 use situation::{
-    ApiError, ChangeSetSummary, ListChangeSetV1Response, TokenDetails,
+    ApiError,
+    ChangeSetSummary,
+    ListChangeSetV1Response,
+    TokenDetails,
     WhoamiResponse,
 };
 
@@ -45,8 +48,8 @@ fn test_deserialize_whoami_response() {
             "workspace_pk": "01JSD4BDWX6326J9Z4YVCAD4J3"
         }
     }"#;
-    let response: WhoamiResponse = serde_json::from_str(json)
-        .expect("Failed to deserialize WhoamiResponse");
+    let response: WhoamiResponse =
+        serde_json::from_str(json).expect("Failed to deserialize WhoamiResponse");
     assert_eq!(response.user_id, "01H7ZHE0XPPRD0MBH0BTJ6BW4M");
     assert_eq!(response.user_email, "i+si@aopab.art");
     assert_eq!(response.workspace_id, "01JSD4BDWX6326J9Z4YVCAD4J3");
@@ -61,8 +64,7 @@ fn test_deserialize_api_error() {
         "message": "Something went wrong",
         "statusCode": 500
     }"#;
-    let error: ApiError =
-        serde_json::from_str(json).expect("Failed to deserialize ApiError");
+    let error: ApiError = serde_json::from_str(json).expect("Failed to deserialize ApiError");
     assert_eq!(error.code, Some(123));
     assert_eq!(error.message, "Something went wrong");
     assert_eq!(error.status_code, 500);
@@ -75,8 +77,8 @@ fn test_deserialize_api_error_null_code() {
         "message": "Another error",
         "statusCode": 404
     }"#;
-    let error: ApiError = serde_json::from_str(json)
-        .expect("Failed to deserialize ApiError with null code");
+    let error: ApiError =
+        serde_json::from_str(json).expect("Failed to deserialize ApiError with null code");
     assert_eq!(error.code, None);
     assert_eq!(error.message, "Another error");
     assert_eq!(error.status_code, 404);
@@ -89,8 +91,8 @@ fn test_deserialize_change_set_summary() {
         "name": "My Change Set",
         "status": "Draft"
     }"#;
-    let summary: ChangeSetSummary = serde_json::from_str(json)
-        .expect("Failed to deserialize ChangeSetSummary");
+    let summary: ChangeSetSummary =
+        serde_json::from_str(json).expect("Failed to deserialize ChangeSetSummary");
     assert_eq!(summary.id, "cs_id_1");
     assert_eq!(summary.name, "My Change Set");
     assert_eq!(summary.status, "Draft");
@@ -113,8 +115,8 @@ fn test_deserialize_list_change_set_response() {
             }
         ]
     }"#;
-    let response: ListChangeSetV1Response = serde_json::from_str(json)
-        .expect("Failed to deserialize ListChangeSetV1Response");
+    let response: ListChangeSetV1Response =
+        serde_json::from_str(json).expect("Failed to deserialize ListChangeSetV1Response");
     assert_eq!(response.change_sets.len(), 2);
     assert_eq!(response.change_sets[0].id, "01H9ZQD35JPMBGHH69BT0Q79VY");
     assert_eq!(response.change_sets[0].name, "Add new feature");
@@ -124,7 +126,7 @@ fn test_deserialize_list_change_set_response() {
 #[test]
 fn test_deserialize_list_change_set_response_empty() {
     let json = r#"{ "changeSets": [] }"#;
-    let response: ListChangeSetV1Response = serde_json::from_str(json)
-        .expect("Failed to deserialize empty ListChangeSetV1Response");
+    let response: ListChangeSetV1Response =
+        serde_json::from_str(json).expect("Failed to deserialize empty ListChangeSetV1Response");
     assert!(response.change_sets.is_empty());
 }

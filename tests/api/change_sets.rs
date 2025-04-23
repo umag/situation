@@ -9,15 +9,20 @@
 // - Each test function focuses on a specific change set operation (list, create, etc.).
 // - Placeholder tests are used initially.
 
+use std::env;
+
 use chrono::Utc;
 use dotenvy::dotenv;
-use situation::{api_client, api_models}; // Use the library crate name 'situation'
-use std::env; // Import Utc from chrono
+use situation::{
+    api_client,
+    api_models,
+}; // Use the library crate name 'situation' // Import Utc from chrono
 
 #[cfg(test)]
 mod tests {
-    use super::*; // Import items from parent module
-    use tokio::time::sleep; // Add sleep import
+    use tokio::time::sleep;
+
+    use super::*; // Import items from parent module // Add sleep import
 
     // Helper function to get workspace_id (could be more sophisticated later)
     // For now, assumes it's set directly in .env or fetched via whoami if needed
@@ -64,10 +69,8 @@ mod tests {
         );
 
         // Add explicit type annotation to the destructuring let binding
-        let (list_response, _logs): (
-            api_models::ListChangeSetV1Response,
-            Vec<String>,
-        ) = result.unwrap();
+        let (list_response, _logs): (api_models::ListChangeSetV1Response, Vec<String>) =
+            result.unwrap();
         // Check the structure based on ListChangeSetV1Response
         assert!(
             list_response // Access the field on the correct struct
@@ -91,8 +94,7 @@ mod tests {
         let workspace_id = get_workspace_id()
             .await
             .expect("Failed to get workspace_id for test");
-        let change_set_name =
-            format!("test-changeset-{}", Utc::now().timestamp_millis()); // Unique name using imported Utc
+        let change_set_name = format!("test-changeset-{}", Utc::now().timestamp_millis()); // Unique name using imported Utc
 
         // Assume api_client::create_change_set exists and takes workspace_id and name
         // We need to define the request body structure based on CreateChangeSetV1Request
@@ -100,8 +102,7 @@ mod tests {
             change_set_name: change_set_name.clone(), // Use clone as we need the original later potentially
         };
 
-        let result =
-            api_client::create_change_set(&workspace_id, request_body).await; // Pass the request body struct
+        let result = api_client::create_change_set(&workspace_id, request_body).await; // Pass the request body struct
 
         assert!(
             result.is_ok(),
@@ -110,10 +111,8 @@ mod tests {
         );
 
         // Add explicit type annotation to the destructuring let binding
-        let (create_response, _logs): (
-            api_models::CreateChangeSetV1Response,
-            Vec<String>,
-        ) = result.unwrap();
+        let (create_response, _logs): (api_models::CreateChangeSetV1Response, Vec<String>) =
+            result.unwrap();
 
         // Check the structure based on CreateChangeSetV1Response using the ChangeSet struct
         // Assert that the ID field is not empty (basic validation)
@@ -127,15 +126,16 @@ mod tests {
             "Created change set name should match the request"
         );
 
-        // Clean up: Delete the created change set
+        // Clean up: Abandon the created change set
         let change_set_id = create_response.change_set.id.clone();
-        sleep(std::time::Duration::from_millis(100)).await; // Small delay before delete
-        let delete_result =
-            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        // Increased delay before abandon to potentially avoid DispatchGone error
+        sleep(std::time::Duration::from_millis(500)).await;
+        let abandon_result = // Use abandon_change_set
+            api_client::abandon_change_set(&workspace_id, &change_set_id).await;
         assert!(
-            delete_result.is_ok(),
-            "Failed to delete change set after create test: {:?}",
-            delete_result.err()
+            abandon_result.is_ok(),
+            "Failed to abandon change set after create test: {:?}", // Updated message
+            abandon_result.err()
         );
     }
 
@@ -152,16 +152,13 @@ mod tests {
         let workspace_id = get_workspace_id()
             .await
             .expect("Failed to get workspace_id for test");
-        let change_set_name =
-            format!("test-get-changeset-{}", Utc::now().timestamp_millis());
+        let change_set_name = format!("test-get-changeset-{}", Utc::now().timestamp_millis());
 
         // 1. Create a change set to get an ID
         let create_request_body = api_models::CreateChangeSetV1Request {
             change_set_name: change_set_name.clone(),
         };
-        let create_result =
-            api_client::create_change_set(&workspace_id, create_request_body)
-                .await;
+        let create_result = api_client::create_change_set(&workspace_id, create_request_body).await;
         assert!(
             create_result.is_ok(),
             "Failed to create change set for get test: {:?}",
@@ -180,8 +177,7 @@ mod tests {
 
         // 2. Get the created change set
         // Assume api_client::get_change_set exists
-        let get_result =
-            api_client::get_change_set(&workspace_id, &change_set_id).await;
+        let get_result = api_client::get_change_set(&workspace_id, &change_set_id).await;
 
         assert!(
             get_result.is_ok(),
@@ -190,10 +186,8 @@ mod tests {
         );
 
         // Add explicit type annotation
-        let (get_response, _logs): (
-            api_models::GetChangeSetV1Response,
-            Vec<String>,
-        ) = get_result.unwrap();
+        let (get_response, _logs): (api_models::GetChangeSetV1Response, Vec<String>) =
+            get_result.unwrap();
 
         // Check the structure based on GetChangeSetV1Response using the ChangeSet struct
         // The type system ensures change_set exists if deserialization succeeded.
@@ -208,39 +202,37 @@ mod tests {
             "Fetched change set name should match"
         );
 
-        // Clean up: Delete the created change set
-        sleep(std::time::Duration::from_millis(100)).await; // Small delay before delete
-        let delete_result =
-            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        // Clean up: Abandon the created change set
+        sleep(std::time::Duration::from_millis(100)).await; // Small delay before abandon
+        let abandon_result = // Use abandon_change_set
+            api_client::abandon_change_set(&workspace_id, &change_set_id).await;
         assert!(
-            delete_result.is_ok(),
-            "Failed to delete change set after get test: {:?}",
-            delete_result.err()
+            abandon_result.is_ok(),
+            "Failed to abandon change set after get test: {:?}", // Updated message
+            abandon_result.err()
         );
     }
 
-    /// Test Case: Verify the `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint call.
-    /// Intention: Ensure the application can correctly call the DELETE endpoint for a specific
-    ///            change set and handle a successful response indicating deletion.
+    /// Test Case: Verify the `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}` endpoint call (abandon).
+    /// Intention: Ensure the application can correctly call the DELETE endpoint (operationId: abandon_change_set)
+    ///            for a specific change set and handle a successful response indicating abandonment.
     /// Design: This test first creates a new change set, then uses its ID to make a DELETE request.
     ///         It asserts that the response indicates success (`success: true`).
     ///         Requires a running SI instance and valid .env configuration.
     #[tokio::test]
-    async fn test_delete_change_set_endpoint() {
+    async fn test_abandon_change_set_endpoint() {
+        // Renamed test function
         dotenv().ok(); // Load .env file
         let workspace_id = get_workspace_id()
             .await
             .expect("Failed to get workspace_id for test");
-        let change_set_name =
-            format!("test-delete-changeset-{}", Utc::now().timestamp_millis());
+        let change_set_name = format!("test-delete-changeset-{}", Utc::now().timestamp_millis());
 
         // 1. Create a change set to get an ID
         let create_request_body = api_models::CreateChangeSetV1Request {
             change_set_name: change_set_name.clone(),
         };
-        let create_result =
-            api_client::create_change_set(&workspace_id, create_request_body)
-                .await;
+        let create_result = api_client::create_change_set(&workspace_id, create_request_body).await;
         assert!(
             create_result.is_ok(),
             "Failed to create change set for delete test: {:?}",
@@ -257,26 +249,26 @@ mod tests {
         // Add a small delay to allow the system to process the creation if needed
         sleep(std::time::Duration::from_millis(100)).await;
 
-        // 2. Delete the created change set
-        // Assume api_client::delete_change_set exists
-        let delete_result =
-            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        // 2. Abandon the created change set
+        // Use the renamed api_client::abandon_change_set function
+        let abandon_result = api_client::abandon_change_set(&workspace_id, &change_set_id).await;
 
         assert!(
-            delete_result.is_ok(),
-            "API call to delete change set should return Ok. Error: {:?}",
-            delete_result.err()
+            abandon_result.is_ok(),
+            "API call to abandon change set should return Ok. Error: {:?}", // Updated message
+            abandon_result.err()
         );
 
         // Add explicit type annotation
-        let (delete_response, _logs): (
-            api_models::DeleteChangeSetV1Response,
+        let (abandon_response, _logs): (
+            // Renamed variable
+            api_models::DeleteChangeSetV1Response, // Model name is correct
             Vec<String>,
-        ) = delete_result.unwrap();
+        ) = abandon_result.unwrap();
 
         // Check the structure based on DeleteChangeSetV1Response
         assert!(
-            delete_response.success,
+            abandon_response.success, // Use renamed variable
             "Response should indicate success (success: true)"
         );
 
@@ -303,16 +295,13 @@ mod tests {
         let workspace_id = get_workspace_id()
             .await
             .expect("Failed to get workspace_id for test");
-        let change_set_name =
-            format!("test-merge-status-{}", Utc::now().timestamp_millis());
+        let change_set_name = format!("test-merge-status-{}", Utc::now().timestamp_millis());
 
         // 1. Create a change set to get an ID
         let create_request_body = api_models::CreateChangeSetV1Request {
             change_set_name: change_set_name.clone(),
         };
-        let create_result =
-            api_client::create_change_set(&workspace_id, create_request_body)
-                .await;
+        let create_result = api_client::create_change_set(&workspace_id, create_request_body).await;
         assert!(
             create_result.is_ok(),
             "Failed to create change set for merge status test: {:?}",
@@ -331,8 +320,7 @@ mod tests {
 
         // 2. Get the merge status for the created change set
         // Assume api_client::get_merge_status exists
-        let merge_status_result =
-            api_client::get_merge_status(&workspace_id, &change_set_id).await;
+        let merge_status_result = api_client::get_merge_status(&workspace_id, &change_set_id).await;
 
         assert!(
             merge_status_result.is_ok(),
@@ -367,13 +355,13 @@ mod tests {
         // Add delay before cleanup - Increased delay to see if it resolves runtime/client issue
         sleep(std::time::Duration::from_millis(500)).await;
 
-        // Clean up: Delete the change set
-        let delete_result =
-            api_client::delete_change_set(&workspace_id, &change_set_id).await;
+        // Clean up: Abandon the change set
+        let abandon_result = // Use abandon_change_set
+            api_client::abandon_change_set(&workspace_id, &change_set_id).await;
         assert!(
-            delete_result.is_ok(),
-            "Failed to delete change set after merge status test: {:?}",
-            delete_result.err()
+            abandon_result.is_ok(),
+            "Failed to abandon change set after merge status test: {:?}", // Updated message
+            abandon_result.err()
         );
     }
 
@@ -384,21 +372,19 @@ mod tests {
     ///         Requires a running SI instance and valid .env configuration.
     ///         Note: The API returns 200 OK with no body on success.
     #[tokio::test]
-    async fn test_force_apply_change_set_endpoint() {
+    async fn test_force_apply_endpoint() {
+        // Renamed test function
         dotenv().ok(); // Load .env file
         let workspace_id = get_workspace_id()
             .await
             .expect("Failed to get workspace_id for test");
-        let change_set_name =
-            format!("test-force-apply-{}", Utc::now().timestamp_millis());
+        let change_set_name = format!("test-force-apply-{}", Utc::now().timestamp_millis());
 
         // 1. Create a change set to get an ID
         let create_request_body = api_models::CreateChangeSetV1Request {
             change_set_name: change_set_name.clone(),
         };
-        let create_result =
-            api_client::create_change_set(&workspace_id, create_request_body)
-                .await;
+        let create_result = api_client::create_change_set(&workspace_id, create_request_body).await;
         assert!(
             create_result.is_ok(),
             "Failed to create change set for force apply test: {:?}",
@@ -416,10 +402,9 @@ mod tests {
         sleep(std::time::Duration::from_millis(200)).await;
 
         // 2. Force apply the created change set
-        // Assume api_client::force_apply_change_set exists
-        let apply_result =
-            api_client::force_apply_change_set(&workspace_id, &change_set_id)
-                .await;
+        // Use the renamed api_client::force_apply function
+        let apply_result = api_client::force_apply(&workspace_id, &change_set_id) // Use renamed function
+            .await;
 
         assert!(
             apply_result.is_ok(),
@@ -429,21 +414,20 @@ mod tests {
 
         // The success response has no body, so checking for Ok is the main assertion.
         // We get back logs, but no specific response data model.
-        let (_response_body_ignored, _logs): ((), Vec<String>) =
-            apply_result.unwrap();
+        let (_response_body_ignored, _logs): ((), Vec<String>) = apply_result.unwrap();
 
         // Add delay before cleanup
         sleep(std::time::Duration::from_millis(100)).await;
 
         // Clean up: Delete the change set (optional, but good practice if apply doesn't auto-delete)
-        // Note: Force applying might merge/delete the change set automatically.
-        // If deletion fails, it might be expected. We'll log the result but not fail the test.
-        let delete_result =
-            api_client::delete_change_set(&workspace_id, &change_set_id).await;
-        if delete_result.is_err() {
+        // Note: Force applying might merge/abandon the change set automatically.
+        // If abandonment fails, it might be expected. We'll log the result but not fail the test.
+        let abandon_result = // Use abandon_change_set
+            api_client::abandon_change_set(&workspace_id, &change_set_id).await;
+        if abandon_result.is_err() {
             println!(
-                "Note: Failed to delete change set after force apply (might be expected): {:?}",
-                delete_result.err()
+                "Note: Failed to abandon change set after force apply (might be expected): {:?}", // Updated message
+                abandon_result.err()
             );
         }
     }

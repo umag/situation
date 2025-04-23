@@ -3,11 +3,15 @@
 // Enums `InputMode` and `DropdownFocus` define specific UI states.
 // Methods previously in `impl App` are kept here.
 
+use std::cmp::min;
+
 use ratatui::widgets::ListState;
 use situation::api_models::{
-    ChangeSet, ChangeSetSummary, MergeStatusV1Response, WhoamiResponse,
+    ChangeSet,
+    ChangeSetSummary,
+    MergeStatusV1Response,
+    WhoamiResponse,
 }; // Ensure correct import name: MergeStatusV1Response
-use std::cmp::min;
 
 // Intention: Define different input modes for the application.
 // Design Choice: Enum to represent distinct input states, starting with Normal and ChangeSetName input.
@@ -141,9 +145,7 @@ impl App {
     // the selection remains unchanged.
     pub fn select_change_set_by_id(&mut self, change_set_id: &str) {
         if let Some(change_sets) = &self.change_sets {
-            if let Some(index) =
-                change_sets.iter().position(|cs| cs.id == change_set_id)
-            {
+            if let Some(index) = change_sets.iter().position(|cs| cs.id == change_set_id) {
                 self.change_set_list_state.select(Some(index));
                 // Clear details when selection changes programmatically too
                 self.selected_change_set_details = None;
@@ -157,8 +159,8 @@ impl App {
     // Intention: Get the summary of the currently selected change set.
     // Design Choice: Helper method to avoid repetitive code.
     pub fn get_selected_changeset_summary(&self) -> Option<&ChangeSetSummary> {
-        self.change_set_list_state.selected().and_then(|idx| {
-            self.change_sets.as_ref().and_then(|css| css.get(idx))
-        })
+        self.change_set_list_state
+            .selected()
+            .and_then(|idx| self.change_sets.as_ref().and_then(|css| css.get(idx)))
     }
 }

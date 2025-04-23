@@ -2,8 +2,9 @@
 // Design Choice: Moved from main.rs to its own module. Takes a mutable App reference.
 // Uses the api_client to fetch data and updates the App state.
 
-use crate::app::App; // Use App from the local app module
-use situation::api_client; // Use api_client from the library crate
+use situation::api_client;
+
+use crate::app::App; // Use App from the local app module // Use api_client from the library crate
 
 // Intention: Helper function to refresh the list of change sets.
 // Design Choice: Encapsulates the API call and state update logic.
@@ -42,10 +43,7 @@ pub async fn refresh_change_sets(app: &mut App) {
                 for log in cs_logs {
                     app.add_log_auto_scroll(log, LOG_HEIGHT);
                 }
-                app.add_log_auto_scroll(
-                    "Change set list refreshed.".to_string(),
-                    LOG_HEIGHT,
-                );
+                app.add_log_auto_scroll("Change set list refreshed.".to_string(), LOG_HEIGHT);
             }
             Err(e) => {
                 app.change_set_list_state.select(None); // Ensure nothing selected on error
@@ -55,8 +53,7 @@ pub async fn refresh_change_sets(app: &mut App) {
         }
     } else {
         app.add_log_auto_scroll(
-            "Cannot refresh change sets: Whoami data not available."
-                .to_string(),
+            "Cannot refresh change sets: Whoami data not available.".to_string(),
             LOG_HEIGHT,
         );
     }

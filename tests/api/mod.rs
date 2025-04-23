@@ -8,6 +8,7 @@
 pub mod change_sets;
 // Declare the module containing whoami tests.
 pub mod whoami;
+// Declare the module containing component tests.
+pub mod components;
 
 // Add declarations for other API test modules here as they are created.
-// Example: pub mod components;

@@ -2,17 +2,38 @@
 // Design Choice: Moved from main.rs to its own module. Takes a Frame and App reference.
 // Constructs the layout and renders widgets based on the App state.
 
-use crate::app::{App, DropdownFocus, InputMode}; // Use App, Enums from local app module
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    prelude::*,                      // Import common traits and types
-    style::{Color, Modifier, Style}, // Added Style, Color, Modifier for highlighting
+    layout::{
+        Alignment,
+        Constraint,
+        Direction,
+        Layout,
+        Rect,
+    },
+    prelude::*, // Import common traits and types
+    style::{
+        Color,
+        Modifier,
+        Style,
+    }, // Added Style, Color, Modifier for highlighting
     widgets::{
-        Block, Borders, Clear, HighlightSpacing, List, ListItem, Paragraph,
+        Block,
+        Borders,
+        Clear,
+        HighlightSpacing,
+        List,
+        ListItem,
+        Paragraph,
         Wrap,
     }, // Added Clear, HighlightSpacing
 };
+
+use crate::app::{
+    App,
+    DropdownFocus,
+    InputMode,
+}; // Use App, Enums from local app module
 
 // --- Constants for UI Layout ---
 const LOG_PANEL_HEIGHT: u16 = 10;
@@ -24,12 +45,11 @@ const DROPDOWN_MAX_ITEMS: usize = 10;
 pub fn ui(f: &mut Frame, app: &App) {
     // Define main layout: Top Bar, Main Content, Logs, optional Input Line.
     // Use constant for log height
-    let (log_constraint, input_constraint) =
-        if app.input_mode == InputMode::ChangeSetName {
-            (Constraint::Length(LOG_PANEL_HEIGHT), Constraint::Length(1))
-        } else {
-            (Constraint::Length(LOG_PANEL_HEIGHT), Constraint::Length(0))
-        };
+    let (log_constraint, input_constraint) = if app.input_mode == InputMode::ChangeSetName {
+        (Constraint::Length(LOG_PANEL_HEIGHT), Constraint::Length(1))
+    } else {
+        (Constraint::Length(LOG_PANEL_HEIGHT), Constraint::Length(0))
+    };
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -95,8 +115,8 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
         .as_ref()
         .map_or("Loading...", |d| &d.workspace_id);
     // Use helper function to get style
-    let ws_is_focused = app.dropdown_focus == DropdownFocus::Workspace
-        && app.input_mode == InputMode::Normal;
+    let ws_is_focused =
+        app.dropdown_focus == DropdownFocus::Workspace && app.input_mode == InputMode::Normal;
     let ws_style = get_trigger_style(ws_is_focused);
     let ws_line = Line::from(vec![
         Span::raw(" Workspace: "),
@@ -120,8 +140,8 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
         "▶"
     };
     // Use helper function to get style
-    let cs_is_focused = app.dropdown_focus == DropdownFocus::ChangeSet
-        && app.input_mode == InputMode::Normal;
+    let cs_is_focused =
+        app.dropdown_focus == DropdownFocus::ChangeSet && app.input_mode == InputMode::Normal;
     let cs_style = get_trigger_style(cs_is_focused);
     let cs_line = Line::from(vec![
         Span::raw(" Change Set: "),
@@ -141,8 +161,7 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
         .whoami_data
         .as_ref()
         .map_or("".to_string(), |d| d.user_email.clone());
-    let email_paragraph =
-        Paragraph::new(email_text).alignment(Alignment::Right);
+    let email_paragraph = Paragraph::new(email_text).alignment(Alignment::Right);
     f.render_widget(email_paragraph, email_area);
 
     cs_trigger_area // Return this area for dropdown positioning
@@ -156,23 +175,15 @@ fn render_content_area(f: &mut Frame, app: &App, area: Rect) {
     let inner_details_area = details_block.inner(area);
     f.render_widget(details_block, area); // Render the block border/title first
 
-    let content_paragraph = if let Some(details) =
-        &app.selected_change_set_details
-    {
+    let content_paragraph = if let Some(details) = &app.selected_change_set_details {
         // --- Render Change Set Details & Merge Status ---
         let mut lines: Vec<Line> = vec![
             Line::from(vec![
-                Span::styled(
-                    "Change Set:",
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::styled("Change Set:", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(format!(" {} ({})", details.name, details.id)),
             ]),
             Line::from(vec![
-                Span::styled(
-                    "Status:",
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::styled("Status:", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(format!(" {}", details.status)), // TODO: Add color based on status?
             ]),
             Line::from(""), // Spacer
@@ -214,12 +225,8 @@ fn render_content_area(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().add_modifier(Modifier::UNDERLINED),
             )),
             Line::from("  q          : Quit"),
-            Line::from(
-                "  Tab        : Switch Focus (Workspace <-> Change Set)",
-            ),
-            Line::from(
-                "  Enter/Space: Activate Focused Trigger (Open Dropdown / Fetch Details)",
-            ),
+            Line::from("  Tab        : Switch Focus (Workspace <-> Change Set)"),
+            Line::from("  Enter/Space: Activate Focused Trigger (Open Dropdown / Fetch Details)"),
             Line::from("  c          : Create Change Set (Enter Input Mode)"),
             Line::from("  d          : Delete Selected Change Set"),
             Line::from("  f          : Force Apply Selected Change Set"),
@@ -281,8 +288,7 @@ fn render_log_panel(f: &mut Frame, app: &App, area: Rect) {
 // Design Choice: Encapsulates the conditional rendering of the input prompt and buffer.
 fn render_input_line(f: &mut Frame, app: &App, area: Rect) {
     if app.input_mode == InputMode::ChangeSetName {
-        let input_prompt_text =
-            "Enter Change Set Name (Esc: Cancel, Enter: Create):";
+        let input_prompt_text = "Enter Change Set Name (Esc: Cancel, Enter: Create):";
         let input_paragraph = Paragraph::new(format!(
             "{} {}{}",
             input_prompt_text,
@@ -326,21 +332,14 @@ fn render_changeset_dropdown(f: &mut Frame, app: &App, cs_trigger_area: Rect) {
                         .iter()
                         .map(|cs| {
                             let status_style = match cs.status.as_str() {
-                                "Completed" => {
-                                    Style::default().fg(Color::Green)
-                                }
+                                "Completed" => Style::default().fg(Color::Green),
                                 "Failed" => Style::default().fg(Color::Red),
-                                "InProgress" => {
-                                    Style::default().fg(Color::Yellow)
-                                }
+                                "InProgress" => Style::default().fg(Color::Yellow),
                                 "Abandoned" => Style::default().fg(Color::Gray),
                                 _ => Style::default(),
                             };
-                            ListItem::new(format!(
-                                "{} ({}) - {}",
-                                cs.name, cs.status, cs.id
-                            ))
-                            .style(status_style)
+                            ListItem::new(format!("{} ({}) - {}", cs.name, cs.status, cs.id))
+                                .style(status_style)
                         })
                         .collect()
                 }
@@ -372,15 +371,20 @@ fn render_changeset_dropdown(f: &mut Frame, app: &App, cs_trigger_area: Rect) {
 // --- Unit Tests ---
 #[cfg(test)]
 mod tests {
-    use super::*; // Import items from parent module (ui)
-    use crate::app::App; // Import App from crate root
-    use ratatui::Terminal;
-    use ratatui::backend::TestBackend;
+    use ratatui::{
+        Terminal,
+        backend::TestBackend,
+    };
     // Import necessary models for mock data
     use situation::api_models::{
-        ChangeSet, MergeStatusV1Response, MergeStatusV1ResponseAction,
+        ChangeSet,
+        MergeStatusV1Response,
+        MergeStatusV1ResponseAction,
         MergeStatusV1ResponseActionComponent,
     };
+
+    use super::*; // Import items from parent module (ui)
+    use crate::app::App; // Import App from crate root
 
     #[test]
     fn test_ui_renders_details_when_present() {

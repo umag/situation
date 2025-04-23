@@ -9,20 +9,31 @@ mod refresh_change_sets;
 mod run_app;
 mod ui;
 
+use std::{
+    error::Error,
+    io,
+};
+
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture}, // Only need mouse capture events here
+    event::{
+        DisableMouseCapture,
+        EnableMouseCapture,
+    }, // Only need mouse capture events here
     execute,
     terminal::{
-        EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+        EnterAlternateScreen,
+        LeaveAlternateScreen,
+        disable_raw_mode,
         enable_raw_mode,
     },
 };
-use ratatui::{Terminal, backend::CrosstermBackend};
-use std::{error::Error, io};
-use tokio;
-
+use ratatui::{
+    Terminal,
+    backend::CrosstermBackend,
+};
 // Use the run_app function from the newly created module
 use run_app::run_app;
+use tokio;
 
 // Intention: Entry point for the TUI application.
 // Design Choice: Using tokio::main for the async `run_app` function.

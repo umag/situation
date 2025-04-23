@@ -15,6 +15,7 @@
 //   Updated WhoamiResponse and re-added TokenDetails struct to match actual API behavior.
 
 use serde::Deserialize;
+use serde_json; // Added import for serde_json::Value
 
 /// Represents the nested token details within the WhoamiResponse.
 /// This structure reflects the actual runtime response from the API.
@@ -181,7 +182,141 @@ pub struct MergeStatusV1Response {
     pub actions: Vec<MergeStatusV1ResponseAction>,
 }
 
+//=============================================================================
+// Component API Models (Added based on openapi.json)
+//=============================================================================
+
+// --- Shared Component Sub-Structs ---
+
+/// Represents a reference to a component, typically by its ID.
+/// Based on `ComponentReference` in openapi.json (prioritizing `componentId`).
+#[derive(serde::Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentReference {
+    pub component_id: String,
+}
+
+/// Represents a connection point on a component (component + socket).
+/// Based on `ConnectionPoint` in openapi.json.
+#[derive(serde::Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionPoint {
+    pub component_id: String, // Assuming component_id is used based on ComponentReference
+    pub socket_name: String,
+}
+
+/// Represents a connection between two component sockets.
+/// Based on `Connection` in openapi.json (using untagged enum for the two directions).
+#[derive(serde::Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum Connection {
+    /// Connection from another component's output to this component's input.
+    OutputToInput {
+        from: ConnectionPoint, // Source component and output socket
+        to: String,            // Target input socket name (on this component)
+    },
+    /// Connection from this component's output to another component's input.
+    InputFromOutput {
+        from: String,        // Source output socket name (on this component)
+        to: ConnectionPoint, // Target component and input socket
+    },
+}
+
+// --- Create Component ---
+
+/// Request body for `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/components`.
+/// Based on `CreateComponentV1Request` in openapi.json.
+#[derive(serde::Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateComponentV1Request {
+    /// The domain properties for the component (arbitrary JSON object).
+    pub domain: serde_json::Value,
+    /// The name for the new component.
+    pub name: String,
+    /// The schema name for the component (e.g., "AWS::EC2::Instance").
+    pub schema_name: String,
+    /// List of connections for the component.
+    pub connections: Vec<Connection>,
+    /// Optional view name associated with the component.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view_name: Option<String>,
+}
+
+/// Response for `POST /v1/w/{workspace_id}/change-sets/{change_set_id}/components`.
+/// Based on `CreateComponentV1Response` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateComponentV1Response {
+    /// The ID of the newly created component.
+    pub component_id: String,
+}
+
+// --- Get Component ---
+
+/// Represents geometry, view, and name information, likely for UI layout.
+/// Based on `GeometryAndViewAndName` in openapi.json (schema is vague, assuming 'name').
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GeometryAndViewAndName {
+    pub name: String,
+    // Note: Add other fields like x, y, width, height if known/needed from actual responses.
+}
+
+/// Represents a management function available for a component.
+/// Based on `GetComponentV1ResponseManagementFunction` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GetComponentV1ResponseManagementFunction {
+    pub management_prototype_id: String,
+    pub name: String,
+}
+
+/// Response for `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}`.
+/// Based on `GetComponentV1Response` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GetComponentV1Response {
+    /// The component's data (arbitrary JSON object).
+    pub component: serde_json::Value,
+    /// The component's domain properties (arbitrary JSON object).
+    pub domain: serde_json::Value,
+    /// List of available management functions for the component.
+    pub management_functions: Vec<GetComponentV1ResponseManagementFunction>,
+    /// List of view-related data for the component.
+    pub view_data: Vec<GeometryAndViewAndName>,
+}
+
+// --- Update Component ---
+
+/// Request body for `PUT /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}`.
+/// Based on `UpdateComponentV1Request` in openapi.json.
+#[derive(serde::Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateComponentV1Request {
+    /// The updated domain properties for the component (arbitrary JSON object).
+    pub domain: serde_json::Value,
+    /// Optional updated name for the component.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Response for `PUT /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}`.
+/// Based on `UpdateComponentV1Response` in openapi.json (empty object {}).
+#[derive(Deserialize, Debug, Clone)]
+pub struct UpdateComponentV1Response {
+    // Empty struct represents the empty JSON object response `{}`.
+}
+
+// --- Delete Component ---
+
+/// Response for `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}`.
+/// Based on `DeleteComponentV1Response` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteComponentV1Response {
+    /// The status after deletion (e.g., "MarkedForDeletion").
+    pub status: String,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
-// for other endpoints like Components, etc.
-// Examples:
-// pub struct GetComponentV1Response { ... }
+// for other endpoints like Management Prototypes, etc.

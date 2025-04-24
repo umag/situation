@@ -19,6 +19,13 @@ This application provides a terminal user interface (TUI) for interacting with t
 - The OpenAPI schema is defined in `openapi.json`.
 - A detailed specification of the implemented server-side API endpoints can be found in `specs/api_specification.md`.
 
+### 3.1 Build Configuration
+- Build settings are configured in `.cargo/config.toml`.
+- Specific rustflags are applied:
+    - `-Z threads=8`: Enables unstable parallel compilation using 8 threads.
+    - `-Aunused_imports`: Allows unused imports without warnings.
+- Development profile (`[profile.dev]`) optimization level is set to `0`.
+
 ## 4. API Client Implementation
 - Core logic (API client, models) is defined in the library (`src/lib.rs`).
 - `api_client` and `api_models` modules are part of the library.

@@ -35,6 +35,7 @@ pub mod get_change_set;
 pub mod get_component;
 pub mod get_merge_status;
 pub mod list_change_sets;
+pub mod list_schemas; // Added module declaration
 pub mod update_component;
 pub mod whoami;
 
@@ -48,6 +49,7 @@ pub use get_change_set::get_change_set;
 pub use get_component::get_component;
 pub use get_merge_status::get_merge_status;
 pub use list_change_sets::list_change_sets;
+pub use list_schemas::list_schemas; // Added function re-export
 pub use update_component::update_component;
 pub use whoami::whoami;
 

@@ -54,7 +54,47 @@ pub async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
                 LOG_HEIGHT,
             );
             // Initial fetch of change sets
-            refresh_change_sets(&mut app).await;
+            refresh_change_sets(&mut app).await; // This populates app.change_sets and might select one
+
+            // After fetching change sets, try to fetch schemas for the selected one
+            if let Some(selected_cs) = app.get_selected_changeset_summary() {
+                let cs_id = selected_cs.id.clone();
+                let workspace_id = app.whoami_data.as_ref().unwrap().workspace_id.clone(); // Safe unwrap due to check above
+                app.add_log_auto_scroll(
+                    format!("Fetching schemas for change set {}...", cs_id),
+                    LOG_HEIGHT,
+                );
+                match api_client::list_schemas(&workspace_id, &cs_id).await {
+                    Ok(schema_response) => {
+                        // Extract just the names and sort them
+                        app.schemas = schema_response
+                            .schemas
+                            .into_iter()
+                            .map(|s| s.schema_name)
+                            .collect();
+                        app.schemas.sort_unstable(); // Sort alphabetically
+                        // Select the first schema by default if list is not empty
+                        if !app.schemas.is_empty() {
+                            app.schema_list_state.select(Some(0));
+                        }
+                        app.add_log_auto_scroll(
+                            "Successfully fetched schemas.".to_string(),
+                            LOG_HEIGHT,
+                        );
+                    }
+                    Err(e) => {
+                        app.add_log_auto_scroll(
+                            format!("Error fetching schemas: {}", e),
+                            LOG_HEIGHT,
+                        );
+                    }
+                }
+            } else {
+                app.add_log_auto_scroll(
+                    "No change set selected initially, skipping schema fetch.".to_string(),
+                    LOG_HEIGHT,
+                );
+            }
         }
         Err(e) => {
             // Log the error message for whoami failure into the app's log buffer.
@@ -67,7 +107,7 @@ pub async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
 
     loop {
         // Intention: Draw the current state of the UI using app state.
-        terminal.draw(|f| ui(f, &app))?; // Pass app state to ui
+        terminal.draw(|f| ui(f, &mut app))?; // Pass mutable app state to ui
 
         // Intention: Handle user input events asynchronously by polling and dispatching to the handler.
         // Design Choice: Poll for events, then call the dedicated handler function if it's a key event.

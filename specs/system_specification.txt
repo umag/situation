@@ -28,11 +28,11 @@ This application provides a terminal user interface (TUI) for interacting with t
 
 ## 4. API Client Implementation
 - Core logic (API client, models) is defined in the library (`src/lib.rs`).
-- `api_client` and `api_models` modules are part of the library.
-- API calls are handled by functions in `src/api_client.rs` (now part of the library).
+- `api_models` module (`src/api_models.rs`) defines data structures using `serde`.
+- The `api_client` module (`src/api_client/mod.rs`) organizes API call implementations. Each endpoint interaction is generally in its own file within the `src/api_client/` directory (e.g., `src/api_client/list_change_sets.rs`).
 - Uses `reqwest` for HTTP communication.
 - Loads configuration lazily using `std::sync::OnceLock`.
-- Data models corresponding to API responses are defined in `src/api_models.rs` (now part of the library) using `serde`. Key models include:
+- Data models corresponding to API responses are defined in `src/api_models.rs`. Key models include:
     - `WhoamiResponse`, `TokenDetails`
     - `ApiError`
     - `ChangeSetSummary`, `ChangeSet` (new detailed struct)
@@ -54,7 +54,8 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}` (in `api_client::get_component`)
     - `PUT /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}` (in `api_client::update_component`)
     - `DELETE /v1/w/{workspace_id}/change-sets/{change_set_id}/components/{component_id}` (in `api_client::delete_component`)
-- The main binary entry point is defined in `src/main.rs`, which sets up the terminal and calls the main application loop. It declares `app`, `refresh_change_sets`, `run_app`, and `ui` as modules.
+    - `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/schema` (in `api_client::list_schemas`)
+- The main binary entry point is defined in `src/main.rs`, which sets up the terminal and calls the main application loop (`run_app::run_app`). It declares `app`, `refresh_change_sets`, `run_app`, and `ui` as modules, referencing files/directories at the `src/` level.
 - The previously mentioned `luminork` dependency/service is **not** currently used; `reqwest` is used directly.
 
 ## 5. TUI Layout & State
@@ -70,41 +71,57 @@ This application provides a terminal user interface (TUI) for interacting with t
     - `input_buffer`: `String` to store user input for change set name.
     - `logs`: `Vec<String>` for logging messages.
     - `log_scroll`: `usize` for scrolling the log view. The view automatically scrolls to the bottom when new logs are added via `add_log_auto_scroll`.
-    - `dropdown_focus`: `DropdownFocus` enum (`Workspace`, `ChangeSet`) to track which top-level trigger has focus.
+    - `dropdown_focus`: `DropdownFocus` enum (`Workspace`, `ChangeSet`) to track which top-level trigger has focus *within the TopBar*.
     - `changeset_dropdown_active`: `bool` to control visibility of the change set dropdown list.
-- Layout:
-    - Top bar (1 line): Displays Workspace trigger (left, ID in Cyan), Change Set trigger (middle, selected name in Yellow), and user email (right). Focused trigger is highlighted with a background color.
-    - Main content area (flexible): Displays the details (`selected_change_set_details`) and merge status (`selected_change_set_merge_status`) of the selected change set if available. Otherwise, displays a static list of application keybindings.
-    - Change Set Dropdown (conditional overlay): If `changeset_dropdown_active` is true, displays a selectable list of change sets below the Change Set trigger. Items are color-coded based on their status (e.g., Completed: Green, Failed: Red, InProgress: Yellow, Abandoned: Gray).
-    - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title. Logs automatically scroll to the bottom when new entries are added.
-    - Input line (1 line, bottom, conditional): Displays the input prompt and buffer when `input_mode` is `ChangeSetName`.
-- The UI rendering logic is defined in `src/ui.rs`. The main `ui` function sets up the layout and calls helper functions (e.g., `render_top_bar`, `render_content_area`, `render_log_panel`, `render_input_line`, `render_changeset_dropdown`) to render specific parts of the interface.
+    - `schemas`: `Vec<String>` holding the names of schemas fetched from the API (`list_schemas` endpoint).
+    - `schema_list_state`: `ListState` for the schema list selection.
+    - `current_focus`: `AppFocus` enum (`TopBar`, `SchemaList`, `ContentArea`, `LogPanel`, `ChangeSetDropdown`, `Input`) tracking the currently focused UI pane.
+- Layout (defined in `src/ui.rs`):
+    - Top bar (1 line): Displays Workspace trigger (left, ID in Cyan), Change Set trigger (middle, selected name in Yellow), and user email (right). Focused trigger is highlighted with a background color. Rendered by `src/ui/render_top_bar.rs`.
+    - Middle Area (split horizontally):
+        - Left Pane (fixed width): Displays a scrollable list of available schemas (`app.schemas`). Rendered by `src/ui/render_schema_list.rs`. Border highlights when focused (`AppFocus::SchemaList`).
+        - Right Pane (flexible): Displays the details (`selected_change_set_details`) and merge status (`selected_change_set_merge_status`) of the selected change set if available. Otherwise, displays a static list of application keybindings. Rendered by `src/ui/render_content_area.rs`.
+    - Change Set Dropdown (conditional overlay): If `changeset_dropdown_active` is true, displays a selectable list of change sets below the Change Set trigger. Items are color-coded based on their status. Rendered by `src/ui/render_changeset_dropdown.rs`.
+    - Log window (10 lines, bottom): Displays scrollable logs (`logs`). Action status may appear in the title. Logs automatically scroll to the bottom when new entries are added. Rendered by `src/ui/render_log_panel.rs`. Border highlights when focused (`AppFocus::LogPanel`).
+    - Input line (1 line, bottom, conditional): Displays the input prompt and buffer when `input_mode` is `ChangeSetName`. Rendered by `src/ui/render_input_line.rs`. Focus automatically moves here (`AppFocus::Input`) when mode changes.
+- The main UI rendering function `ui` is defined in `src/ui.rs`. It sets up the overall layout (`ratatui::layout::Layout`) and delegates rendering of specific components to helper functions located within the `src/ui/` directory.
 
 ## 6. Event Handling
-- Main event loop is the asynchronous `run_app` function defined in `src/run_app.rs`.
-- Handles keyboard input:
-    - **Normal Mode (Dropdown Closed):**
-        - 'q': Quit the application.
-        - Tab: Switch focus between Workspace and Change Set triggers (`dropdown_focus`).
-        - Enter / Space: Activate the focused trigger.
-            - Workspace: (Currently no action).
-            - Change Set: Opens the change set dropdown list (`changeset_dropdown_active` = true). If an item is selected, also fetches details/status using `get_change_set` and `get_merge_status`.
-        - 'c': Enter `ChangeSetName` input mode.
-        - 'd': Abandon the *currently selected* change set (from `change_set_list_state`) using `abandon_change_set`. Refreshes list.
-        - 'f': Force apply the *currently selected* change set using `force_apply`. Refreshes list.
-        - 'k': Manually scroll the log window up.
-        - 'j': Manually scroll the log window down.
-    - **Normal Mode (Change Set Dropdown Active):**
-        - Up Arrow: Select previous item in the dropdown list (wraps).
-        - Down Arrow: Select next item in the dropdown list (wraps).
-        - Enter: Selects the highlighted item, closes the dropdown (`changeset_dropdown_active` = false), clears details (requires explicit fetch).
-        - Esc / Tab: Closes the dropdown (`changeset_dropdown_active` = false) without changing selection. Tab also switches focus.
-    - **ChangeSetName Mode:**
-        - Enter: Submits the entered name (`input_buffer`) to create a new change set using `create_change_set`. Refreshes list, **automatically selects the newly created change set**, and returns to Normal mode.
-        - Esc: Cancel input, clear buffer, and return to Normal mode.
+- The main application loop is the asynchronous `run_app` function defined in `src/run_app.rs`.
+- Keyboard event handling logic is primarily located in `src/run_app/event_handler.rs`, called from the main loop.
+- Handles keyboard input based on `app.input_mode` and `app.current_focus`:
+    - **Global:**
+        - 'q': Quit the application (except in Input mode).
+    - **Normal Mode (`InputMode::Normal`):**
+        - **Focus Cycling (Tab):** Cycles focus between `TopBar`, `SchemaList`, and `LogPanel`.
+        - **Focus: `TopBar`:**
+            - Left/Right Arrows: Switch focus between Workspace and Change Set triggers (`dropdown_focus`).
+            - Enter/Space: Activate the focused trigger (`dropdown_focus`).
+                - Workspace: (No action).
+                - Change Set: Opens/closes the change set dropdown (`changeset_dropdown_active`). If dropdown is opened, focus remains `TopBar`. If dropdown is closed by selecting an item (Enter), fetches details, status, and schemas for the selected change set.
+            - 'c': Enter `ChangeSetName` input mode and set focus to `Input`.
+            - 'd': Abandon the *currently selected* change set (from `change_set_list_state`) using `abandon_change_set`. Refreshes list and schemas.
+            - 'f': Force apply the *currently selected* change set using `force_apply`. Refreshes list and schemas.
+            - 'k'/'j': Scroll log panel up/down (global scroll).
+        - **Focus: `SchemaList`:**
+            - Up/Down Arrows: Select previous/next schema in the list (`schema_list_state`).
+            - 'k'/'j': Scroll log panel up/down (global scroll).
+        - **Focus: `LogPanel`:**
+            - Up/Down Arrows or 'k'/'j': Scroll log panel up/down.
+        - **Focus: `ContentArea`:** (Currently skipped in focus cycle)
+            - 'k'/'j': Scroll log panel up/down (global scroll).
+        - **Focus: `ChangeSetDropdown`:** (Handled within `TopBar` focus when `changeset_dropdown_active` is true)
+            - Up/Down Arrows: Select previous/next change set.
+            - Enter: Selects item, closes dropdown, fetches details/status/schemas. Focus remains `TopBar`.
+            - Esc: Closes dropdown without selection. Focus remains `TopBar`.
+            - Tab: Closes dropdown and cycles focus to `SchemaList`.
+    - **Input Mode (`InputMode::ChangeSetName`):** (Focus is automatically set to `Input`)
+        - Enter: Submits the entered name (`input_buffer`) to create a new change set using `create_change_set`. Refreshes list, **automatically selects the newly created change set**, fetches its schemas, and returns to Normal mode with focus on `TopBar`.
+        - Esc: Cancel input, clear buffer, and return to Normal mode with focus on `TopBar`.
         - Backspace: Delete the last character from the input buffer.
         - Character input: Append character to the input buffer.
 - Uses the helper function `refresh_change_sets` (defined in `src/refresh_change_sets.rs`) to reload the change set list after create, delete, or apply actions.
+- Includes helper functions in `event_handler.rs` (`fetch_details_and_status`, `fetch_schemas`) to handle API calls triggered by user actions.
 - Includes a method `App::select_change_set_by_id` to programmatically select a change set based on its ID.
 
 ## 7. Error Handling
@@ -128,12 +145,15 @@ This application provides a terminal user interface (TUI) for interacting with t
 
 ## 9. Current Status (as of 2025-04-22 - Split main.rs)
 - Project refactored into a library (`src/lib.rs`) and a binary (`src/main.rs`).
-- `src/main.rs` was further split into modules: `app.rs`, `refresh_change_sets.rs`, `run_app.rs`, `ui.rs`. `main.rs` now only contains the entry point and module declarations.
+- `src/main.rs` was further split into modules: `app.rs`, `refresh_change_sets.rs`, `run_app.rs` (containing the main loop), `ui.rs` (containing the main render function).
+- The `api_client` logic is now in the `src/api_client/` directory.
+- The event handling logic is primarily in `src/run_app/event_handler.rs`.
+- The UI rendering helpers are in the `src/ui/` directory.
 - API client and models are in the library.
 - API client uses `reqwest` and lazy static config from `.env`.
 - All specified changeset API endpoints are implemented in the client (`whoami`, `list_change_sets`, `create_change_set`, `get_change_set`, `abandon_change_set`, `get_merge_status`, `force_apply`).
-- Component API endpoints (`create_component`, `get_component`, `update_component`, `delete_component`) are implemented in the client.
-- TUI implemented (split across `run_app.rs` for logic and `ui.rs` for rendering):
+- Component API endpoints (`create_component`, `get_component`, `update_component`, `delete_component`) are implemented in the client (`src/api_client/`).
+- TUI implemented (split across `run_app.rs` for main loop, `run_app/event_handler.rs` for input logic, `ui.rs` for main layout, and `src/ui/` for component rendering):
     - Fetches and displays `/whoami` data (Workspace ID, Email) on startup.
     - Top bar displays Workspace trigger (static, ID in Cyan), Change Set dropdown trigger (selected name in Yellow), and Email. Focus is switchable via Tab and highlighted.
     - Change Set trigger (Enter/Space) opens/closes a dropdown list of available change sets (items are color-coded by status).
@@ -146,8 +166,8 @@ This application provides a terminal user interface (TUI) for interacting with t
     - Handles manual log scrolling (j/k) in Normal mode.
     - Handles text input (characters, Backspace, Esc, Enter) in ChangeSetName mode.
     - Allows quitting ('q').
-- Integration tests exist for API client functions (change sets, whoami, components).
-- Unit tests exist for API model deserialization and App state (including log scrolling). A basic smoke test for UI rendering (`tests/unit/ui_rendering.rs`) ensures the main `ui` function doesn't panic.
+- Integration tests exist for API client functions (change sets, whoami, components) in `tests/api/`.
+- Unit tests exist for API model deserialization (`tests/unit/api_models.rs`) and App state (`tests/unit/app_state.rs`). A basic smoke test for UI rendering (`tests/unit/ui_rendering.rs`) ensures the main `ui` function doesn't panic. (Note: `app_state.rs` tests might need path updates if they reference moved logic directly).
 - **Note:** The `luminork` dependency/service mentioned previously is **not** used by this TUI application. The local `si/` clone is also not directly used by the current implementation.
 - **Note:** The implementation for the luminork service itself is available locally within the `si/` repository clone at `si/lib/luminork-server/`.
-- **Note:** (2025-04-22) The `ui` function in `src/ui.rs` was refactored into smaller helper functions for better organization.
+- **Note:** (2025-04-27) The code structure reflects further refactoring: API client calls are in `src/api_client/`, event handling in `src/run_app/event_handler.rs`, and UI rendering helpers in `src/ui/`.

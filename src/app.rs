@@ -4,6 +4,7 @@
 // Methods previously in `impl App` are kept here.
 
 use std::cmp::min;
+use std::collections::HashMap; // Added for potential future use with schemas
 
 use ratatui::widgets::ListState;
 use situation::api_models::{
@@ -14,16 +15,28 @@ use situation::api_models::{
 }; // Ensure correct import name: MergeStatusV1Response
 
 // Intention: Define different input modes for the application.
-// Design Choice: Enum to represent distinct input states, starting with Normal and ChangeSetName input.
-#[derive(Debug, Clone, PartialEq, Eq)] // Added PartialEq, Eq for comparison
+// Design Choice: Enum to represent distinct input states.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputMode {
     Normal,
     ChangeSetName,
 }
 
-// Intention: Define which top-level element has focus for navigation.
-// Design Choice: Enum to represent focus state, starting with Workspace and ChangeSet triggers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+// Intention: Define the possible areas of the UI that can have focus.
+// Design Choice: Enum provides a clear and type-safe way to manage focus state across different panes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] // Added Copy
+pub enum AppFocus {
+    TopBar, // For switching between Workspace/ChangeSet triggers
+    SchemaList,
+    ContentArea, // Placeholder for future content interaction
+    LogPanel,
+    ChangeSetDropdown, // Focus specifically when the dropdown is active
+    Input,             // Focus when in input mode
+}
+
+// Intention: Define which top-level element has focus *within the TopBar*.
+// Design Choice: Enum to represent focus state for Workspace/ChangeSet triggers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] // Added Copy
 pub enum DropdownFocus {
     Workspace,
     ChangeSet,
@@ -45,12 +58,20 @@ pub struct App {
     pub input_buffer: String,           // Buffer for text input
     pub logs: Vec<String>,
     pub log_scroll: usize,
-    pub dropdown_focus: DropdownFocus, // Which dropdown trigger is focused
+    pub dropdown_focus: DropdownFocus, // Which dropdown trigger is focused (within TopBar)
     pub changeset_dropdown_active: bool, // Is the changeset dropdown list visible?
+
+    // Schema List State
+    pub schemas: Vec<String>, // Stores the names of the schemas from openapi.json
+    pub schema_list_state: ListState, // State for the schema list selection
+
+    // Overall Focus
+    pub current_focus: AppFocus, // Tracks which major UI pane has focus
 }
 
 impl App {
     // Intention: Create a new App instance with default values.
+    // Design Choice: Initialize new schema and focus fields.
     pub fn new() -> Self {
         Self {
             whoami_data: None,
@@ -63,8 +84,15 @@ impl App {
             input_buffer: String::new(),
             logs: Vec::new(),
             log_scroll: 0,
-            dropdown_focus: DropdownFocus::Workspace, // Start focus on workspace
+            dropdown_focus: DropdownFocus::Workspace, // Start focus on workspace trigger in top bar
             changeset_dropdown_active: false,         // Dropdown starts closed
+
+            // Initialize schema list
+            schemas: Vec::new(),
+            schema_list_state: ListState::default(),
+
+            // Initialize focus
+            current_focus: AppFocus::TopBar, // Start focus on the top bar
         }
     }
 
@@ -145,7 +173,9 @@ impl App {
     // the selection remains unchanged.
     pub fn select_change_set_by_id(&mut self, change_set_id: &str) {
         if let Some(change_sets) = &self.change_sets {
-            if let Some(index) = change_sets.iter().position(|cs| cs.id == change_set_id) {
+            if let Some(index) =
+                change_sets.iter().position(|cs| cs.id == change_set_id)
+            {
                 self.change_set_list_state.select(Some(index));
                 // Clear details when selection changes programmatically too
                 self.selected_change_set_details = None;
@@ -159,8 +189,48 @@ impl App {
     // Intention: Get the summary of the currently selected change set.
     // Design Choice: Helper method to avoid repetitive code.
     pub fn get_selected_changeset_summary(&self) -> Option<&ChangeSetSummary> {
-        self.change_set_list_state
-            .selected()
-            .and_then(|idx| self.change_sets.as_ref().and_then(|css| css.get(idx)))
+        self.change_set_list_state.selected().and_then(|idx| {
+            self.change_sets.as_ref().and_then(|css| css.get(idx))
+        })
+    }
+
+    // Intention: Move selection down in the schema list.
+    // Design Choice: Handles wrapping and empty list case.
+    pub fn schema_next(&mut self) {
+        if self.schemas.is_empty() {
+            return;
+        }
+        let i = match self.schema_list_state.selected() {
+            Some(i) => {
+                if i >= self.schemas.len() - 1 {
+                    0 // Wrap around
+                } else {
+                    i + 1
+                }
+            }
+            None => 0, // Select first if nothing selected
+        };
+        self.schema_list_state.select(Some(i));
+        // TODO: Potentially load schema details when selected in the future
+    }
+
+    // Intention: Move selection up in the schema list.
+    // Design Choice: Handles wrapping and empty list case.
+    pub fn schema_previous(&mut self) {
+        if self.schemas.is_empty() {
+            return;
+        }
+        let i = match self.schema_list_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.schemas.len() - 1 // Wrap around
+                } else {
+                    i - 1
+                }
+            }
+            None => self.schemas.len() - 1, // Select last if nothing selected
+        };
+        self.schema_list_state.select(Some(i));
+        // TODO: Potentially load schema details when selected in the future
     }
 }

@@ -1,0 +1,1 @@
+implement get schemas use openapi.json for data, display them as a scrollable vertical column on left side of window

@@ -318,5 +318,32 @@ pub struct DeleteComponentV1Response {
     pub status: String,
 }
 
+// --- List Schemas ---
+
+/// Represents a summary of a schema as returned by the list_schemas endpoint.
+/// Based on the example in `ListSchemaV1Response` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SchemaSummary {
+    /// The unique identifier for the schema.
+    pub schema_id: String,
+    /// The name of the schema (e.g., "AWS::EC2::Instance").
+    pub schema_name: String,
+    /// The category the schema belongs to.
+    pub category: String,
+    /// Indicates if the schema is installed (represented as a string "true" or "false" in the example).
+    /// Design Choice: Deserialize as String first, then potentially parse to bool if needed elsewhere.
+    pub installed: String,
+}
+
+/// Response for `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/schema`.
+/// Based on `ListSchemaV1Response` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListSchemaV1Response {
+    /// A list containing summaries of the available schemas.
+    pub schemas: Vec<SchemaSummary>,
+}
+
 // TODO: Add more structs here as needed based on openapi.json schemas
 // for other endpoints like Management Prototypes, etc.

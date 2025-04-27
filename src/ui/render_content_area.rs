@@ -33,6 +33,10 @@ use crate::app::{
 // 2. If components are loaded but empty OR components are loading/error: Show details/status/component status.
 // 3. If no change set details are selected: Show keybindings.
 pub(super) fn render_content_area(f: &mut Frame, app: &App, area: Rect) {
+    // Changed app to immutable reference since we don't need to modify it in this function
+    // We need a fixed height for the log panel to pass here, assuming 10 like in event_handler.
+    const LOG_HEIGHT: usize = 10;
+
     // Determine border style based on focus
     let border_style = if app.current_focus == AppFocus::ContentArea {
         Style::default().fg(Color::Cyan) // Highlight color when focused
@@ -47,18 +51,99 @@ pub(super) fn render_content_area(f: &mut Frame, app: &App, area: Rect) {
     let inner_details_area = details_block.inner(area);
     f.render_widget(details_block, area); // Render the block border/title first
 
+    // Debug: Log the state of components
+    let debug_lines = match &app.selected_change_set_components {
+        Some(components) => {
+            format!("DEBUG: Components loaded: {}", components.len())
+        }
+        None => "DEBUG: No components loaded".to_string(),
+    };
+    f.render_widget(
+        Paragraph::new(debug_lines).style(Style::default().fg(Color::Red)),
+        Rect::new(area.x, area.y, area.width, 1),
+    );
+
     let content_paragraph = match &app.selected_change_set_components {
         // Case 1: Components loaded and non-empty -> Show ONLY components
         Some(components) if !components.is_empty() => {
             let mut lines: Vec<Line> = Vec::new();
+
+            // Debug: Add component IDs and schema IDs
             lines.push(Line::from(Span::styled(
-                "Components:",
+                "DEBUG: Component IDs and Schema IDs:",
+                Style::default().fg(Color::Red),
+            )));
+            for component in components.iter().take(3) {
+                // Show first 3 for brevity
+                lines.push(Line::from(Span::styled(
+                    format!(
+                        "  - {} (schema_id: {})",
+                        component.name, component.schema_id
+                    ),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+            if components.len() > 3 {
+                lines.push(Line::from(Span::styled(
+                    format!("  ... and {} more", components.len() - 3),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+
+            // Debug: Show selected schema info
+            if let Some(selected_idx) = app.schema_list_state.selected() {
+                if !app.schemas.is_empty() {
+                    let selected_schema = &app.schemas[selected_idx];
+                    lines.push(Line::from(Span::styled(
+                        format!(
+                            "DEBUG: Selected schema: {} (id: {})",
+                            selected_schema.schema_name,
+                            selected_schema.schema_id
+                        ),
+                        Style::default().fg(Color::Red),
+                    )));
+                } else {
+                    lines.push(Line::from(Span::styled(
+                        "DEBUG: No schemas available",
+                        Style::default().fg(Color::Red),
+                    )));
+                }
+            } else {
+                lines.push(Line::from(Span::styled(
+                    "DEBUG: No schema selected",
+                    Style::default().fg(Color::Red),
+                )));
+            }
+
+            // Display all components without filtering
+            lines.push(Line::from(Span::styled(
+                format!("Components ({})", components.len()),
                 Style::default().add_modifier(Modifier::BOLD),
             )));
-            for component in components {
-                lines.push(Line::from(format!("  - {}", component.name)));
-                // TODO: Render as rectangles later if needed
+
+            // Add each component
+            if components.is_empty() {
+                lines.push(Line::from("  No components in this change set."));
+            } else {
+                for component in components.iter() {
+                    // Look up the schema name for this component ID
+                    // The component ID is the same as the schema ID
+                    let schema_name = app
+                        .schemas
+                        .iter()
+                        .find(|schema| schema.schema_id == component.id)
+                        .map(|schema| schema.schema_name.clone())
+                        .unwrap_or_else(|| "Unknown Schema".to_string());
+
+                    // Display the component with its schema name
+                    lines.push(Line::from(format!(
+                        "  - {} ({})",
+                        component.id, schema_name
+                    )));
+                    // TODO: Render as rectangles later if needed
+                }
             }
+
             Paragraph::new(lines).wrap(Wrap { trim: true })
         }
         // Case 2, 3, 4: Components empty, loading, error, or no CS selected

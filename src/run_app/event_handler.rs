@@ -20,7 +20,10 @@ use ratatui::{
 use situation::{
     // Use the library crate namespace
     api_client,
-    api_models::CreateChangeSetV1Request,
+    api_models::{
+        ComponentViewV1,
+        CreateChangeSetV1Request,
+    },
 };
 
 use crate::{
@@ -308,8 +311,49 @@ pub async fn handle_key_event<B: Backend>(
                 // --- Focus: Schema List ---
                 AppFocus::SchemaList => {
                     match key.code {
-                        KeyCode::Up => app.schema_previous(),
-                        KeyCode::Down => app.schema_next(),
+                        KeyCode::Up => {
+                            app.schema_previous();
+                            // Fetch components for the selected change set
+                            if let (Some(ws_id), Some(cs_id)) =
+                                (workspace_id.clone(), selected_cs_id.clone())
+                            {
+                                app.add_log_auto_scroll(
+                                    "DEBUG: Fetching components after schema selection (Up)".to_string(),
+                                    LOG_HEIGHT,
+                                );
+                                fetch_components(app, &ws_id, &cs_id).await;
+                            }
+                        }
+                        KeyCode::Down => {
+                            app.schema_next();
+                            // Fetch components for the selected change set
+                            if let (Some(ws_id), Some(cs_id)) =
+                                (workspace_id.clone(), selected_cs_id.clone())
+                            {
+                                app.add_log_auto_scroll(
+                                    "DEBUG: Fetching components after schema selection (Down)".to_string(),
+                                    LOG_HEIGHT,
+                                );
+                                fetch_components(app, &ws_id, &cs_id).await;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            // When Enter is pressed on a schema, fetch components for the selected change set
+                            if let (Some(ws_id), Some(cs_id)) =
+                                (workspace_id.clone(), selected_cs_id.clone())
+                            {
+                                app.current_action =
+                                    Some("Fetching components...".to_string());
+                                terminal.draw(|f| ui(f, app))?; // Redraw immediately
+                                fetch_components(app, &ws_id, &cs_id).await;
+                                app.current_action = None;
+                            } else {
+                                app.add_log_auto_scroll(
+                                    "Cannot fetch components: No change set selected.".to_string(),
+                                    LOG_HEIGHT,
+                                );
+                            }
+                        }
                         // KeyCode::Tab handled globally above
                         KeyCode::Char('k') => app.scroll_logs_up(), // Keep global log scroll
                         KeyCode::Char('j') => app.scroll_logs_down(LOG_HEIGHT), // Keep global log scroll
@@ -597,20 +641,75 @@ async fn fetch_components(app: &mut App, ws_id: &str, cs_id: &str) {
         LOG_HEIGHT,
     );
     match api_client::list_components(ws_id, cs_id).await {
-        Ok((components_response, logs)) => {
-            app.selected_change_set_components =
-                Some(components_response.components);
-            logs.into_iter()
+        Ok((components_response, mut api_logs)) => {
+            // Make logs mutable
+            // Add API client logs first
+            api_logs
+                .drain(..)
                 .for_each(|log| app.add_log_auto_scroll(log, LOG_HEIGHT));
+
+            // Log the component IDs
+            let num_components = components_response.components.len();
             app.add_log_auto_scroll(
-                "Successfully fetched components.".to_string(),
+                format!(
+                    "DEBUG: Received {} component IDs from API.",
+                    num_components
+                ),
+                LOG_HEIGHT,
+            );
+
+            // Log the component IDs for debugging
+            for (i, component_id) in
+                components_response.components.iter().enumerate()
+            {
+                app.add_log_auto_scroll(
+                    format!("DEBUG: Component ID {}: {}", i, component_id),
+                    LOG_HEIGHT,
+                );
+            }
+
+            // For now, create dummy ComponentViewV1 objects with the IDs
+            // In a real implementation, you would fetch the component details for each ID
+            let components = components_response
+                .components
+                .iter()
+                .map(|id| {
+                    ComponentViewV1 {
+                        id: id.clone(),
+                        schema_id: "unknown".to_string(), // We don't need to filter by schema ID
+                        schema_variant_id: "unknown".to_string(),
+                        sockets: Vec::new(),
+                        domain_props: Vec::new(),
+                        resource_props: Vec::new(),
+                        name: id.clone(), // Use the ID as the name for now
+                        resource_id: "unknown".to_string(),
+                        to_delete: false,
+                        can_be_upgraded: false,
+                        connections: Vec::new(),
+                        views: Vec::new(),
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            app.selected_change_set_components = Some(components);
+            app.add_log_auto_scroll(
+                format!(
+                    "Successfully processed {} component IDs.",
+                    num_components
+                ),
                 LOG_HEIGHT,
             );
         }
         Err(e) => {
-            app.selected_change_set_components = None; // Clear components on error
+            // Log the detailed error
             app.add_log_auto_scroll(
-                format!("Error fetching components: {}", e),
+                format!("ERROR fetching components: {:?}", e), // Use debug format for full error
+                LOG_HEIGHT,
+            );
+            // Ensure state is cleared on error
+            app.selected_change_set_components = None;
+            app.add_log_auto_scroll(
+                "Cleared component state due to fetch error.".to_string(),
                 LOG_HEIGHT,
             );
         }

@@ -89,11 +89,16 @@ async fn test_list_components_success()
         "Success status log not found"
     );
 
-    // Check response structure
+    // Check that the components array is not empty
     assert!(
-        response.components.iter().all(|c| !c.id.is_empty()),
-        "Component ID should not be empty"
+        !response.components.is_empty(),
+        "Components array should not be empty"
     );
+
+    // Check that all component IDs are non-empty strings
+    for component_id in &response.components {
+        assert!(!component_id.is_empty(), "Component ID should not be empty");
+    }
     // Add more specific assertions if component details are known/mocked
     // e.g., if a component was created, check if its ID/name is in the list.
 

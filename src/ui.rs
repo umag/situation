@@ -43,7 +43,8 @@ const SCHEMA_LIST_WIDTH: u16 = 30; // Width for the new schema list pane
 // Intention: Main UI rendering function. Sets up the layout and calls helper functions for each section.
 // Design Choice: Split rendering logic into focused helper functions. Added horizontal split for schema list.
 // Changed `app` parameter to `&mut App` to allow state modification by stateful widgets.
-pub fn ui(f: &mut Frame, app: &mut App) { // Changed to &mut App
+pub fn ui(f: &mut Frame, app: &mut App) {
+    // Changed to &mut App
     // Define main vertical layout: Top Bar, Middle Area, Logs, optional Input Line.
     let (log_constraint, input_constraint) =
         if app.input_mode == InputMode::ChangeSetName {
@@ -93,7 +94,7 @@ pub fn ui(f: &mut Frame, app: &mut App) { // Changed to &mut App
     render_schema_list(f, app, schema_list_area); // Call the new function
 
     // Render Main Content Area (now on the right)
-    render_content_area(f, app, content_area);
+    render_content_area(f, &*app, content_area);
 
     // Render Log Panel
     render_log_panel(f, app, log_area);

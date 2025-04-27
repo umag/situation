@@ -84,6 +84,95 @@ pub async fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
                             "Successfully fetched schemas.".to_string(),
                             LOG_HEIGHT,
                         );
+
+                        // Fetch components for the selected change set
+                        app.add_log_auto_scroll(
+                            format!(
+                                "Fetching components for change set {}...",
+                                cs_id
+                            ),
+                            LOG_HEIGHT,
+                        );
+                        match api_client::list_components(&workspace_id, &cs_id)
+                            .await
+                        {
+                            Ok((components_response, mut api_logs)) => {
+                                // Add API client logs first
+                                api_logs.drain(..).for_each(|log| {
+                                    app.add_log_auto_scroll(log, LOG_HEIGHT)
+                                });
+
+                                // Log the component IDs
+                                let num_components =
+                                    components_response.components.len();
+                                app.add_log_auto_scroll(
+                                    format!(
+                                        "DEBUG: Received {} component IDs from API.",
+                                        num_components
+                                    ),
+                                    LOG_HEIGHT,
+                                );
+
+                                // Log the component IDs for debugging
+                                for (i, component_id) in components_response
+                                    .components
+                                    .iter()
+                                    .enumerate()
+                                {
+                                    app.add_log_auto_scroll(
+                                        format!(
+                                            "DEBUG: Component ID {}: {}",
+                                            i, component_id
+                                        ),
+                                        LOG_HEIGHT,
+                                    );
+                                }
+
+                                // For now, create dummy ComponentViewV1 objects with the IDs
+                                // In a real implementation, you would fetch the component details for each ID
+                                let components = components_response
+                                    .components
+                                    .iter()
+                                    .map(|id| {
+                                        situation::api_models::ComponentViewV1 {
+                                            id: id.clone(),
+                                            schema_id: "unknown".to_string(), // We don't need to filter by schema ID
+                                            schema_variant_id: "unknown"
+                                                .to_string(),
+                                            sockets: Vec::new(),
+                                            domain_props: Vec::new(),
+                                            resource_props: Vec::new(),
+                                            name: id.clone(), // Use the ID as the name for now
+                                            resource_id: "unknown".to_string(),
+                                            to_delete: false,
+                                            can_be_upgraded: false,
+                                            connections: Vec::new(),
+                                            views: Vec::new(),
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+
+                                app.selected_change_set_components =
+                                    Some(components);
+                                app.add_log_auto_scroll(
+                                    format!(
+                                        "Successfully processed {} component IDs.",
+                                        num_components
+                                    ),
+                                    LOG_HEIGHT,
+                                );
+                            }
+                            Err(e) => {
+                                app.add_log_auto_scroll(
+                                    format!(
+                                        "Error fetching components: {:?}",
+                                        e
+                                    ),
+                                    LOG_HEIGHT,
+                                );
+                                app.selected_change_set_components = None;
+                            }
+                        }
                     }
                     Err(e) => {
                         app.add_log_auto_scroll(

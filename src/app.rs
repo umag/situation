@@ -56,7 +56,7 @@ pub struct App {
     pub change_set_list_state: ListState, // State for the change set list selection (now in dropdown)
     pub selected_change_set_details: Option<ChangeSet>, // Details of the selected change set
     pub selected_change_set_merge_status: Option<MergeStatusV1Response>, // Merge status of the selected change set
-    pub selected_change_set_components: Option<Vec<ComponentViewV1>>, // Added: Components in the selected change set
+    pub selected_change_set_components: Option<Vec<ComponentViewV1>>, // Components in the selected change set, parsed from JSON string
     pub current_action: Option<String>, // Feedback for ongoing actions
     pub input_mode: InputMode,          // Current input mode
     pub input_buffer: String,           // Buffer for text input
@@ -206,6 +206,8 @@ impl App {
 
     // Intention: Move selection down in the schema list.
     // Design Choice: Handles wrapping and empty list case.
+    // When a schema is selected, the content area will filter components to show only those
+    // that match the selected schema's ID.
     pub fn schema_next(&mut self) {
         if self.schemas.is_empty() {
             return;
@@ -221,11 +223,27 @@ impl App {
             None => 0, // Select first if nothing selected
         };
         self.schema_list_state.select(Some(i));
-        // TODO: Potentially load schema details when selected in the future
+        // Note: Component filtering based on selected schema is handled in render_content_area.rs
+
+        // Debug: Log the selected schema
+        if let Some(selected_idx) = self.schema_list_state.selected() {
+            if !self.schemas.is_empty() {
+                let selected_schema = &self.schemas[selected_idx];
+                self.add_log_auto_scroll(
+                    format!(
+                        "DEBUG: Selected schema: {} (id: {})",
+                        selected_schema.schema_name, selected_schema.schema_id
+                    ),
+                    10, // LOG_HEIGHT
+                );
+            }
+        }
     }
 
     // Intention: Move selection up in the schema list.
     // Design Choice: Handles wrapping and empty list case.
+    // When a schema is selected, the content area will filter components to show only those
+    // that match the selected schema's ID.
     pub fn schema_previous(&mut self) {
         if self.schemas.is_empty() {
             return;
@@ -241,6 +259,20 @@ impl App {
             None => self.schemas.len() - 1, // Select last if nothing selected
         };
         self.schema_list_state.select(Some(i));
-        // TODO: Potentially load schema details when selected in the future
+        // Note: Component filtering based on selected schema is handled in render_content_area.rs
+
+        // Debug: Log the selected schema
+        if let Some(selected_idx) = self.schema_list_state.selected() {
+            if !self.schemas.is_empty() {
+                let selected_schema = &self.schemas[selected_idx];
+                self.add_log_auto_scroll(
+                    format!(
+                        "DEBUG: Selected schema: {} (id: {})",
+                        selected_schema.schema_name, selected_schema.schema_id
+                    ),
+                    10, // LOG_HEIGHT
+                );
+            }
+        }
     }
 }

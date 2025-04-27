@@ -59,12 +59,28 @@ pub async fn list_components(
     logs.push(format!("Response Status: {}", status));
 
     if status.is_success() {
-        // Deserialize the successful response
-        let response_body = response.json::<ListComponentsV1Response>().await?; // Propagate JSON parsing error
-        logs.push(
-            "Successfully deserialized ListComponentsV1Response.".to_string(),
-        );
-        Ok((response_body, logs))
+        // Get the raw response text first for debugging
+        let response_text = response.text().await?;
+        logs.push(format!("Raw response: {}", response_text));
+
+        // Try to parse the response as JSON
+        match serde_json::from_str::<ListComponentsV1Response>(&response_text) {
+            Ok(response_body) => {
+                logs.push(
+                    "Successfully deserialized ListComponentsV1Response."
+                        .to_string(),
+                );
+                logs.push(format!(
+                    "Components: {:?}",
+                    response_body.components
+                ));
+                Ok((response_body, logs))
+            }
+            Err(e) => {
+                logs.push(format!("Error deserializing response: {:?}", e));
+                Err(format!("Failed to deserialize response: {:?}", e).into())
+            }
+        }
     } else {
         // Attempt to deserialize the error response as ApiError
         let error_text = response

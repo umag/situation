@@ -443,12 +443,12 @@ pub struct ComponentViewV1 {
 }
 
 /// Response for `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/components`.
-/// Based on `ListComponentsV1Response` in openapi.json, but corrected to expect a Vec.
+/// Based on `ListComponentsV1Response` in openapi.json, but corrected to match actual API response.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ListComponentsV1Response {
-    /// A list containing detailed views of the components in the change set.
-    pub components: Vec<ComponentViewV1>,
+    /// A list of component IDs in the change set.
+    pub components: Vec<String>,
 }
 
 // --- List Schemas ---

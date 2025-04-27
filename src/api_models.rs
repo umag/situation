@@ -318,6 +318,139 @@ pub struct DeleteComponentV1Response {
     pub status: String,
 }
 
+// --- List Components ---
+
+/// Represents the direction of a socket (input or output).
+/// Based on `SocketDirection` enum in openapi.json.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SocketDirection {
+    Input,
+    Output,
+}
+
+/// Represents a socket on a component.
+/// Based on `SocketViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SocketViewV1 {
+    pub id: String,
+    pub name: String,
+    pub direction: SocketDirection,
+    pub arity: String,            // e.g., "one", "many"
+    pub value: serde_json::Value, // Arbitrary JSON value
+}
+
+/// Represents a view associated with a component.
+/// Based on `ViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewV1 {
+    pub id: String,
+    pub name: String,
+    pub is_default: bool,
+}
+
+/// Represents a property view for a component (domain or resource).
+/// Based on `ComponentPropViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentPropViewV1 {
+    pub id: String,
+    pub prop_id: String,
+    pub value: serde_json::Value, // Arbitrary JSON value
+    pub path: String,
+}
+
+// --- Connection View Sub-Structs ---
+
+/// Represents an incoming connection view.
+/// Based on `IncomingConnectionViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingConnectionViewV1 {
+    pub from_component_id: String,
+    pub from_component_name: String,
+    pub from: String, // Socket name on the source component
+    pub to: String,   // Socket name on the destination component (this one)
+}
+
+/// Represents an outgoing connection view.
+/// Based on `OutgoingConnectionViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OutgoingConnectionViewV1 {
+    pub to_component_id: String,
+    pub to_component_name: String,
+    pub from: String, // Socket name on the source component (this one)
+                      // Note: 'to' socket name is missing in OpenAPI spec, might be implied or an omission.
+}
+
+/// Represents a managing connection view.
+/// Based on `ManagingConnectionViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagingConnectionViewV1 {
+    pub component_id: String,
+    pub component_name: String,
+}
+
+/// Represents a managed-by connection view.
+/// Based on `ManagedByConnectionViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedByConnectionViewV1 {
+    pub component_id: String,
+    pub component_name: String,
+}
+
+/// Represents different types of connection views.
+/// Based on `ConnectionViewV1` (oneOf) in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(untagged)] // Using untagged because the structure differs based on the single key
+pub enum ConnectionViewV1 {
+    Incoming {
+        incoming: IncomingConnectionViewV1,
+    },
+    Outgoing {
+        outgoing: OutgoingConnectionViewV1,
+    },
+    Managing {
+        managing: ManagingConnectionViewV1,
+    },
+    ManagedBy {
+        managed_by: ManagedByConnectionViewV1,
+    },
+}
+
+/// Represents a detailed view of a component.
+/// Based on `ComponentViewV1` in openapi.json.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentViewV1 {
+    pub id: String,
+    pub schema_id: String,
+    pub schema_variant_id: String,
+    pub sockets: Vec<SocketViewV1>,
+    pub domain_props: Vec<ComponentPropViewV1>,
+    pub resource_props: Vec<ComponentPropViewV1>,
+    pub name: String,
+    pub resource_id: String,
+    pub to_delete: bool,
+    pub can_be_upgraded: bool,
+    pub connections: Vec<ConnectionViewV1>,
+    pub views: Vec<ViewV1>,
+}
+
+/// Response for `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/components`.
+/// Based on `ListComponentsV1Response` in openapi.json, but corrected to expect a Vec.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListComponentsV1Response {
+    /// A list containing detailed views of the components in the change set.
+    pub components: Vec<ComponentViewV1>,
+}
+
 // --- List Schemas ---
 
 /// Represents a summary of a schema as returned by the list_schemas endpoint.
@@ -331,9 +464,9 @@ pub struct SchemaSummary {
     pub schema_name: String,
     /// The category the schema belongs to.
     pub category: String,
-    /// Indicates if the schema is installed (represented as a string "true" or "false" in the example).
-    /// Design Choice: Deserialize as String first, then potentially parse to bool if needed elsewhere.
-    pub installed: String,
+    /// Indicates if the schema is installed.
+    /// Design Choice: Changed from String to bool based on decoding error. Assumes API returns true/false.
+    pub installed: bool,
 }
 
 /// Response for `GET /v1/w/{workspace_id}/change-sets/{change_set_id}/schema`.

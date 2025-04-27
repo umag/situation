@@ -25,9 +25,10 @@ use ratatui::{
 };
 
 // Import the helper function from its new module
-use super::get_trigger_style::get_trigger_style;
+use super::get_trigger_style::get_trigger_style; // Keep this if still used for inner focus
 use crate::app::{
     App,
+    AppFocus, // Need AppFocus to check overall focus
     DropdownFocus,
     InputMode,
 }; // Use App, Enums from local app module
@@ -55,14 +56,35 @@ pub(super) fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
         .as_ref()
         .map_or("Loading...", |d| &d.workspace_id);
     // Use helper function to get style
-    let ws_is_focused = app.dropdown_focus == DropdownFocus::Workspace
-        && app.input_mode == InputMode::Normal;
-    let ws_style = get_trigger_style(ws_is_focused);
-    let ws_line = Line::from(vec![
-        Span::raw(" Workspace: "),
-        Span::styled(ws_name, Style::default().fg(Color::Cyan)),
-        Span::raw(" "),
-    ]);
+    let ws_is_focused = app.dropdown_focus == DropdownFocus::Workspace; // Inner focus check
+    let top_bar_has_focus = app.current_focus == AppFocus::TopBar; // Overall focus check
+
+    // Determine style based on overall focus and inner focus
+    let ws_style = if top_bar_has_focus {
+        if ws_is_focused {
+            // Focused pane, focused element
+            Style::default()
+                .bg(Color::DarkGray)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            // Focused pane, unfocused element
+            Style::default().bg(Color::DarkGray).fg(Color::Gray)
+        }
+    } else {
+        // Unfocused pane
+        Style::default().fg(Color::DarkGray) // Keep it simple when pane is not focused
+    };
+
+    // Construct the title with highlighted 'W'
+    let ws_title_spans = vec![
+        Span::raw(" "), // Leading space
+        Span::styled("W", Style::default().fg(Color::Yellow)), // Highlighted 'W'
+        Span::raw("orkspace: "), // Rest of the label
+        Span::styled(ws_name, Style::default().fg(Color::Cyan)), // Workspace name
+        Span::raw(" "), // Trailing space
+    ];
+    let ws_line = Line::from(ws_title_spans);
     let ws_trigger = Paragraph::new(ws_line)
         .style(ws_style)
         .block(Block::default());
@@ -80,17 +102,38 @@ pub(super) fn render_top_bar(f: &mut Frame, app: &App, area: Rect) -> Rect {
         "▶"
     };
     // Use helper function to get style
-    let cs_is_focused = app.dropdown_focus == DropdownFocus::ChangeSet
-        && app.input_mode == InputMode::Normal;
-    let cs_style = get_trigger_style(cs_is_focused);
-    let cs_line = Line::from(vec![
-        Span::raw(" Change Set: "),
-        Span::styled(selected_cs_name, Style::default().fg(Color::Yellow)),
-        Span::raw(selected_cs_status),
-        Span::raw(" "),
-        Span::raw(cs_indicator),
-        Span::raw(" "),
-    ]);
+    let cs_is_focused = app.dropdown_focus == DropdownFocus::ChangeSet; // Inner focus check
+    // top_bar_has_focus already determined above
+
+    // Determine style based on overall focus and inner focus
+    let cs_style = if top_bar_has_focus {
+        if cs_is_focused {
+            // Focused pane, focused element
+            Style::default()
+                .bg(Color::DarkGray)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            // Focused pane, unfocused element
+            Style::default().bg(Color::DarkGray).fg(Color::Gray)
+        }
+    } else {
+        // Unfocused pane
+        Style::default().fg(Color::DarkGray) // Keep it simple when pane is not focused
+    };
+
+    // Construct the title with highlighted 'C'
+    let cs_title_spans = vec![
+        Span::raw(" "), // Leading space
+        Span::styled("C", Style::default().fg(Color::Yellow)), // Highlighted 'C'
+        Span::raw("hange Set: "), // Rest of the label
+        Span::styled(selected_cs_name, Style::default().fg(Color::Yellow)), // Selected CS name (keep yellow?)
+        Span::raw(selected_cs_status), // Status
+        Span::raw(" "),                // Space before indicator
+        Span::raw(cs_indicator),       // Dropdown indicator
+        Span::raw(" "),                // Trailing space
+    ];
+    let cs_line = Line::from(cs_title_spans);
     let cs_trigger = Paragraph::new(cs_line)
         .style(cs_style)
         .block(Block::default());

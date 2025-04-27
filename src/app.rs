@@ -7,12 +7,15 @@ use std::cmp::min;
 use std::collections::HashMap; // Added for potential future use with schemas
 
 use ratatui::widgets::ListState;
+use situation::api_models::SchemaSummary;
 use situation::api_models::{
     ChangeSet,
     ChangeSetSummary,
+    ComponentViewV1, // Added import for component details
     MergeStatusV1Response,
+    // SchemaSummary, // Removed from group
     WhoamiResponse,
-}; // Ensure correct import name: MergeStatusV1Response
+}; // Ensure correct import name: MergeStatusV1Response // Import separately
 
 // Intention: Define different input modes for the application.
 // Design Choice: Enum to represent distinct input states.
@@ -53,6 +56,7 @@ pub struct App {
     pub change_set_list_state: ListState, // State for the change set list selection (now in dropdown)
     pub selected_change_set_details: Option<ChangeSet>, // Details of the selected change set
     pub selected_change_set_merge_status: Option<MergeStatusV1Response>, // Merge status of the selected change set
+    pub selected_change_set_components: Option<Vec<ComponentViewV1>>, // Added: Components in the selected change set
     pub current_action: Option<String>, // Feedback for ongoing actions
     pub input_mode: InputMode,          // Current input mode
     pub input_buffer: String,           // Buffer for text input
@@ -62,7 +66,9 @@ pub struct App {
     pub changeset_dropdown_active: bool, // Is the changeset dropdown list visible?
 
     // Schema List State
-    pub schemas: Vec<String>, // Stores the names of the schemas from openapi.json
+    // Intention: Store detailed schema information for display and interaction.
+    // Design Choice: Use the SchemaSummary struct from api_models to hold category, installed status, etc.
+    pub schemas: Vec<SchemaSummary>, // Changed from Vec<String>
     pub schema_list_state: ListState, // State for the schema list selection
 
     // Overall Focus
@@ -79,6 +85,7 @@ impl App {
             change_set_list_state: ListState::default(),
             selected_change_set_details: None,
             selected_change_set_merge_status: None,
+            selected_change_set_components: None, // Initialize the new field
             current_action: None,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
@@ -141,6 +148,7 @@ impl App {
             // When selection changes, clear old details
             self.selected_change_set_details = None;
             self.selected_change_set_merge_status = None;
+            self.selected_change_set_components = None; // Clear components too
         }
     }
 
@@ -164,13 +172,14 @@ impl App {
             // When selection changes, clear old details
             self.selected_change_set_details = None;
             self.selected_change_set_merge_status = None;
+            self.selected_change_set_components = None; // Clear components too
         }
     }
 
     // Intention: Select a change set in the list state by its ID.
     // Design Choice: Iterates through the change_sets vector, finds the index matching the ID,
     // and updates the list state. If the ID is not found or the list is empty/None,
-    // the selection remains unchanged.
+    // the selection remains unchanged. Also clears details/components.
     pub fn select_change_set_by_id(&mut self, change_set_id: &str) {
         if let Some(change_sets) = &self.change_sets {
             if let Some(index) =
@@ -180,6 +189,7 @@ impl App {
                 // Clear details when selection changes programmatically too
                 self.selected_change_set_details = None;
                 self.selected_change_set_merge_status = None;
+                self.selected_change_set_components = None; // Clear components too
             }
             // If ID not found, do nothing, keep current selection
         }

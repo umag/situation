@@ -35,6 +35,7 @@ pub mod get_change_set;
 pub mod get_component;
 pub mod get_merge_status;
 pub mod list_change_sets;
+pub mod list_components; // Added module declaration
 pub mod list_schemas; // Added module declaration
 pub mod update_component;
 pub mod whoami;
@@ -49,6 +50,7 @@ pub use get_change_set::get_change_set;
 pub use get_component::get_component;
 pub use get_merge_status::get_merge_status;
 pub use list_change_sets::list_change_sets;
+pub use list_components::list_components; // Added function re-export
 pub use list_schemas::list_schemas; // Added function re-export
 pub use update_component::update_component;
 pub use whoami::whoami;
@@ -65,20 +67,23 @@ pub(crate) struct ApiConfig {
     jwt_token: String, // Keep for potential future use/refresh
 }
 
-static API_CONFIG: OnceLock<Result<ApiConfig, Box<dyn Error + Send + Sync>>> = OnceLock::new();
+static API_CONFIG: OnceLock<Result<ApiConfig, Box<dyn Error + Send + Sync>>> =
+    OnceLock::new();
 
 // Helper function to create a config instance. Used by get_api_config.
 // Kept private to this module.
 fn create_new_api_config() -> Result<ApiConfig, Box<dyn Error + Send + Sync>> {
     dotenv().ok(); // Load .env file, ignore errors if it doesn't exist
 
-    let base_url = env::var("SI_API").map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-    let jwt_token =
-        env::var("JWT_TOKEN").map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    let base_url = env::var("SI_API")
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    let jwt_token = env::var("JWT_TOKEN")
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
     let mut headers = HeaderMap::new();
-    let mut auth_value = HeaderValue::from_str(&format!("Bearer {}", jwt_token))
-        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+    let mut auth_value =
+        HeaderValue::from_str(&format!("Bearer {}", jwt_token))
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
     auth_value.set_sensitive(true);
     headers.insert(AUTHORIZATION, auth_value);
 
@@ -96,7 +101,8 @@ fn create_new_api_config() -> Result<ApiConfig, Box<dyn Error + Send + Sync>> {
 
 // Provides access to the initialized ApiConfig.
 // Made pub(crate) for use by submodule functions.
-pub(crate) fn get_api_config() -> Result<&'static ApiConfig, &'static (dyn Error + Send + Sync)> {
+pub(crate) fn get_api_config()
+-> Result<&'static ApiConfig, &'static (dyn Error + Send + Sync)> {
     API_CONFIG
         .get_or_init(create_new_api_config)
         .as_ref()

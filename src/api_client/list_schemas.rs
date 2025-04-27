@@ -9,15 +9,12 @@ use std::error::Error;
 
 use reqwest::Method; // Method is not used directly anymore, but keep reqwest imports if needed
 
-// Use the shared config getter and ApiError type from the parent module
-use super::{
-    ApiError,
-    get_api_config,
-};
-use crate::api_models::{
-    ApiError,
-    ListSchemaV1Response,
-}; // Use crate:: for models within the library
+// Use the shared config getter from the parent module
+use super::get_api_config;
+use crate::ApiError;
+// Use models from the crate root
+// ApiError is brought into scope via `pub(crate) use` in src/api_client/mod.rs
+use crate::api_models::ListSchemaV1Response; // Use crate:: for models within the library
 
 /// Fetches the list of schemas for a specific workspace and change set.
 ///
